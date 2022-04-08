@@ -1,0 +1,9 @@
+[package]
+name = "SmartCity_Auth"
+version = "0.0.1"
+edition = "2021"
+authors = ["Jonathan Hauter"]
+
+[dependencies]
+actix-web = "4"
+
