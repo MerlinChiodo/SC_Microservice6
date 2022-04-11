@@ -1,53 +1,77 @@
 use actix_web::{
-    body::BoxBody,
-    dev::Server,
-    http::{header::{ContentType}},
-    web, App, HttpRequest, HttpResponse, HttpServer, Responder, cookie::time::format_description::modifier::Second,
+    body::BoxBody, cookie::time::format_description::modifier::Second, dev::Server,
+    http::header::ContentType, web, App, CustomizeResponder, HttpRequest, HttpResponse, HttpServer,
+    Responder,
 };
 
-use serde::Serialize;
+use actix_web::http::header::TryIntoHeaderPair;
+use actix_web::http::StatusCode;
+use config::Config;
 use core::fmt;
-use std::{net::TcpListener};
+use secrecy::Secret;
+use serde::{Deserialize, Serialize};
+use std::net::TcpListener;
 
-#[derive(Serialize, Debug)]
-struct AuthServerInfo<'a> {
-    api_version: &'a str,
-    server_version: &'a str,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ServerConfig {
+    info: AuthServerInfo,
 }
 
-impl<'a> Responder for AuthServerInfo<'a> {
-    type Body = BoxBody;
-
-    fn respond_to(self, _req: &HttpRequest) -> HttpResponse<Self::Body> {
-        let body = serde_json::to_string(&self).unwrap();
-        HttpResponse::Ok()
-            .content_type(ContentType::json())
-            .body(body)
-    }
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AuthServerInfo {
+    api_version: String,
+    server_version: String,
 }
-
-impl<'a> Default for AuthServerInfo<'a> {
+impl Default for AuthServerInfo {
     fn default() -> Self {
         AuthServerInfo {
-            api_version: "0.01", //TODO: Read the api version from somewhere
-            server_version: option_env!("CARGO_PKG_VERSION").unwrap_or("Unknown Version"),
+            api_version: String::from("Unknown Version"), //TODO: Read the api version from somewhere
+            server_version: String::from(
+                option_env!("CARGO_PKG_VERSION").unwrap_or("Unknown Version"),
+            ),
         }
     }
 }
-impl<'a> fmt::Display for AuthServerInfo<'a> {
+
+impl fmt::Display for AuthServerInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(API: {}, Server: {})", self.api_version, self.server_version)
+        write!(
+            f,
+            "(API: {}, Server: {})",
+            self.api_version, self.server_version
+        )
     }
 }
 
-async fn ping(_req: HttpRequest) -> impl Responder {
-    AuthServerInfo::default()
+struct UserRegisterData {
+    username: Secret<String>,
+    password: Secret<String>,
+    mail: Secret<String>,
 }
 
-pub fn server_start(listener: TcpListener) -> Result<Server, std::io::Error> {
-    let server = HttpServer::new(|| App::new().route("ping", web::get().to(ping)))
-        .listen(listener)?
-        .run();
+fn index(form: web::Form<UserRegisterData>) -> HttpResponse {
+    HttpResponse::Ok().finish()
+}
+
+async fn register() -> HttpResponse {
+    HttpResponse::Ok().finish()
+}
+async fn ping(config: web::Data<ServerConfig>) -> impl Responder {
+    let body = serde_json::to_string(&config.info).unwrap();
+    HttpResponse::Ok()
+        .content_type(ContentType::json())
+        .body(body)
+}
+
+pub fn server_start(config: ServerConfig, listener: TcpListener) -> Result<Server, std::io::Error> {
+    let server = HttpServer::new(move || {
+        App::new()
+            .app_data(web::Data::new(config.clone()))
+            .route("/ping", web::get().to(ping))
+            .route("/users", web::post().to(register))
+    })
+    .listen(listener)?
+    .run();
 
     Ok(server)
 }
