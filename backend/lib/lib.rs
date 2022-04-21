@@ -8,6 +8,7 @@ use actix_web::http::header::TryIntoHeaderPair;
 use actix_web::http::StatusCode;
 use config::Config;
 use core::fmt;
+use std::fmt::write;
 use secrecy::Secret;
 use serde::{Deserialize, Serialize};
 use std::net::TcpListener;
@@ -44,9 +45,16 @@ impl fmt::Display for AuthServerInfo {
 }
 
 struct UserRegisterData {
-    username: Secret<String>,
+    username: String,
     password: Secret<String>,
-    mail: Secret<String>,
+    mail: String,
+    citizen_register_key : String
+}
+
+impl fmt::Display for UserRegisterData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Nutzerregistrierung ({}: {}, {})", self.username, self.mail, self.citizen_register_key)
+    }
 }
 
 fn index(form: web::Form<UserRegisterData>) -> HttpResponse {
