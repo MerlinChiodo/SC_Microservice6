@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/SmartAuth.iml" filepath="$PROJECT_DIR$/.idea/SmartAuth.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/SC_Microservice6.iml" filepath="$PROJECT_DIR$/.idea/SC_Microservice6.iml" />
     </modules>
   </component>
 </project>
