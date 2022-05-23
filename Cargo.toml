@@ -14,3 +14,4 @@ opt-level = 'z'
 
 [profile.release.package.backend]
 opt-level = 3
+
