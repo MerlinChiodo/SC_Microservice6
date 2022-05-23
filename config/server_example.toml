@@ -1,0 +1,14 @@
+[info]
+api_version = "0.0.1"
+server_version = "0.0.1"
+
+[db]
+host = "ip"
+username = "benutzer"
+password = 'passwort'
+name = "datenbank"
+
+[rmq]
+host = "ip"
+username = "benutzer"
+password = "passwort"
