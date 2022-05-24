@@ -1,5 +1,5 @@
 [workspace]
-cargo-features = ["profile-overrides"]
+
 members = [
     "frontend",
     "backend"
