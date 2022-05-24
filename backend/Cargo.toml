@@ -1,9 +1,7 @@
 [package]
-name = "SmartCity_Auth"
-version = "0.0.1"
+version = "0.1.0"
+name = "backend"
 edition = "2021"
-authors = ["Jonathan Hauter"]
-
 [lib]
 path = "lib/lib.rs"
 
@@ -12,10 +10,16 @@ path = "src/main.rs"
 name = "SmartCity_Auth"
 
 [dependencies]
+moon = { git = "https://github.com/MoonZoon/MoonZoon", rev = "15cb619faca5f78a47e08f4af4bfa595f0eb64b1" }
 serde = {version = "1.0.136", features = ["derive"]}
 serde_json = "1.0"
 secrecy = "0.8.0"
-actix-web = "4"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 reqwest = { version = "0.11", features = ["json"]}
-config = {version = "0.13", features = ["json", "toml"]}
+actix-web = "4.0.0-beta.10"
+config = "0.13.1"
+derive_more = "0.99.0"
+diesel = { version = "1.4.8", features = ["mysql", "r2d2"] }
+lapin = "2.1.1"
+executor-trait = "2.1.0"
+tokio-executor-trait = "2.1.0"

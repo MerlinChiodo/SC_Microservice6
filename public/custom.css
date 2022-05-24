@@ -1,0 +1,12 @@
+[data-theme="light"],
+:root:not([data-theme="dark"]) {
+    --background-color: #e4e5f2;
+    background: linear-gradient(
+            rgba(0, 0, 0, 0.8),
+            rgba(0, 0, 0, 0.8)
+    ),
+        url("https://picsum.photos/1000");
+
+        background-size: cover;
+        opacity: 0.90;
+}
