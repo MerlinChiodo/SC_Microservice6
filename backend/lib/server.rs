@@ -31,7 +31,15 @@ pub struct ServerConfig {
     db: Option<DatabaseInfo>,
     rmq: Option<RabbitMQServerInfo>
 }
-
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            info: AuthServerInfo::default(),
+            db: None,
+            rmq: None,
+        }
+    }
+}
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DatabaseInfo {
     host: String,
