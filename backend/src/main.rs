@@ -18,6 +18,6 @@ async fn main() -> std::io::Result<()> {
     let port = listener.local_addr().unwrap().port();
     println!("{}",port);
 
-    server::server_start(server_config.unwrap_or_default(), listener).await.expect("Unable to start server");
+    server::server_start(server_config.unwrap_or_default(), listener).await;
     Ok(())
 }

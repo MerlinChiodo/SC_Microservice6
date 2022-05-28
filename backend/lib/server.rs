@@ -109,7 +109,7 @@ async fn frontend() -> Frontend {
         .body_content(r#"<div id="app"></div>"#)
 }
 
-pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result<(), std::io::Error> {
+pub async fn server_start(config: ServerConfig, listener: TcpListener) {
     let db_url = match &config.db {
         None => {
             std::env::var("DATABASE_URL")
@@ -138,6 +138,12 @@ pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result
     let rmq_connection_options = lapin::ConnectionProperties::default()
         .with_executor(tokio_executor_trait::Tokio::current());
 
+    let rmq_manager = deadpool_lapin::Manager::new(rmq_url, rmq_connection_options);
+
+    let rmq_connection_pool: deadpool_lapin::Pool = deadpool::managed::Pool::builder(rmq_manager)
+        .max_size(10)
+        .build()
+        .expect("Unable to create rmq pool");
 
     let app = move || {
         let redirect = Redirect::new()
@@ -157,14 +163,16 @@ pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result
                 };
                 CONFIG.cors.origins.contains(origin)
             }))
+
             .wrap(ErrorHandlers::new().handler(StatusCode::INTERNAL_SERVER_ERROR, error_handler::internal_server_error)
                 .handler(StatusCode::NOT_FOUND, error_handler::not_found))
 
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(db_pool.clone()))
-
+            .app_data(web::Data::new(rmq_connection_pool.clone()))
     };
-    start_with_app(frontend, up_msg_handler, app, set_server_api_routes).await
+
+    start_with_app(frontend, up_msg_handler, app, set_server_api_routes).await.unwrap();
 }
 
 async fn ping(config: web::Data<ServerConfig>) -> impl Responder {
