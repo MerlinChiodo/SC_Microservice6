@@ -23,7 +23,6 @@ use std::fmt::{Display, format, Formatter, write};
 use secrecy::Secret;
 use serde::{Deserialize, Serialize};
 use std::net::TcpListener;
-use diesel::{Connection, r2d2};
 use diesel::r2d2::ConnectionManager;
 use diesel_migrations::embed_migrations;
 
@@ -111,27 +110,43 @@ async fn frontend() -> Frontend {
         .append_to_head(r#"<link rel="stylesheet" href="/_api/public/custom.css">"#)
         .body_content(r#"<div id="app"></div>"#)
 }
+type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
 
-pub async fn server_start(config: ServerConfig, listener: TcpListener) {
+pub enum ServerCreationError {
+    DBError(DBConnectionError),
+    RMQError(RMQConnectionError),
+}
+
+pub enum DBConnectionError {
+    MissingSettings,
+    //TODO: This is bad, fix it!
+    ConnectionError(String)
+}
+pub enum RMQConnectionError {
+    MissingSettings,
+    ConnectionError(deadpool_lapin::BuildError)
+}
+pub fn connect_to_db(config: &ServerConfig) -> Result<DBPool, DBConnectionError> {
     let db_url = match &config.db {
         None => {
             std::env::var("DATABASE_URL")
-                .expect("Unable to find db connection settings")
+                .map_err(|_| DBConnectionError::MissingSettings)?
         }
         Some(db) => {
             db.to_string()
         }
     };
-
     let db_manager = ConnectionManager::<MysqlConnection>::new(db_url);
-    let db_pool = r2d2::Pool::builder()
-        .build(db_manager)
-        .unwrap_or_else(|e| panic!("Unable to connect to db: {}", e.to_string()));
 
+     diesel::r2d2::Pool::builder().build(db_manager)
+         .map_err(|err| DBConnectionError::ConnectionError(err.to_string()))
+}
+
+pub fn connect_to_rmq(config: &ServerConfig) -> Result<deadpool_lapin::Pool, RMQConnectionError> {
     let rmq_url = match &config.rmq {
         None => {
             std::env::var("AMQP_ADDR")
-                .expect("Unable to find rabbitmq connection settings")
+                .map_err(|_| RMQConnectionError::MissingSettings)?
         }
         Some(rmq) => {
             rmq.to_string()
@@ -143,10 +158,18 @@ pub async fn server_start(config: ServerConfig, listener: TcpListener) {
 
     let rmq_manager = deadpool_lapin::Manager::new(rmq_url, rmq_connection_options);
 
-    let rmq_connection_pool: deadpool_lapin::Pool = deadpool::managed::Pool::builder(rmq_manager)
+    deadpool::managed::Pool::builder(rmq_manager)
         .max_size(10)
         .build()
-        .expect("Unable to create rmq pool");
+        .map_err(|err| RMQConnectionError::ConnectionError(err))
+}
+
+pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result<(), ServerCreationError>{
+    let db_pool = connect_to_db(&config)
+        .map_err(|err| ServerCreationError::DBError(err))?;
+
+    let rmq_pool = connect_to_rmq(&config)
+        .map_err(|err| ServerCreationError::RMQError(err))?;
 
     let app = move || {
         let redirect = Redirect::new()
@@ -172,10 +195,11 @@ pub async fn server_start(config: ServerConfig, listener: TcpListener) {
 
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(db_pool.clone()))
-            .app_data(web::Data::new(rmq_connection_pool.clone()))
+            .app_data(web::Data::new(rmq_pool.clone()))
     };
 
     start_with_app(frontend, up_msg_handler, app, set_server_api_routes).await.unwrap();
+    Ok(())
 }
 
 async fn ping(config: web::Data<ServerConfig>) -> impl Responder {
