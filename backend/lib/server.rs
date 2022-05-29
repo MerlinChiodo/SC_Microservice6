@@ -1,3 +1,4 @@
+
 use std::fmt;
 use diesel::prelude::*;
 use moon::{
@@ -24,6 +25,8 @@ use serde::{Deserialize, Serialize};
 use std::net::TcpListener;
 use diesel::{Connection, r2d2};
 use diesel::r2d2::ConnectionManager;
+use diesel_migrations::embed_migrations;
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServerConfig {

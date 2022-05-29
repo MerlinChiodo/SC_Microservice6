@@ -24,3 +24,9 @@ diesel = { version = "1.4.8", features = ["mysql", "r2d2"] }
 lapin = "2.1.1"
 executor-trait = "2.1.0"
 tokio-executor-trait = "2.1.0"
+deadpool = {version = "0.9.5", features = ["managed", "rt_tokio_1", "serde"]}
+deadpool-lapin = "0.10.0"
+diesel_migrations = "1.4.0"
+rand = "0.8.5"
+rust-argon2 = "1.0.0"
+base64 = "0.13.0"
