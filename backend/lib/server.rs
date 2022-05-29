@@ -112,16 +112,19 @@ async fn frontend() -> Frontend {
 }
 type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
 
+#[derive(Debug)]
 pub enum ServerCreationError {
     DBError(DBConnectionError),
     RMQError(RMQConnectionError),
 }
 
+#[derive(Debug)]
 pub enum DBConnectionError {
     MissingSettings,
     //TODO: This is bad, fix it!
     ConnectionError(String)
 }
+#[derive(Debug)]
 pub enum RMQConnectionError {
     MissingSettings,
     ConnectionError(deadpool_lapin::BuildError)

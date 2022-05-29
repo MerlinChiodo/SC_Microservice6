@@ -5,11 +5,13 @@ use crate::models::{NewUser, User, UserInfo};
 use crate::schema::Users::dsl::Users;
 use crate::schema::Users::username;
 
+#[derive(Debug)]
 pub enum UserRegistrationError {
     HashError(argon2::Error),
     InsertionError(diesel::result::Error)
 }
 
+#[derive(Debug)]
 pub enum UserAuthError {
     DbError(diesel::result::Error),
     VerifyError(argon2::Error),

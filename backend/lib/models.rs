@@ -11,7 +11,6 @@ pub struct User {
     id: u64,
     username: String,
     hash: String,
-    salt: String
 }
 impl User {
     pub fn verify_with_password(&self, password: &str) -> Result<bool, argon2::Error> {
@@ -24,7 +23,6 @@ impl User {
 pub struct NewUser {
     pub username: String,
     pub hash: String,
-    pub salt: String
 }
 
 impl TryFrom<UserInfo> for NewUser {
@@ -32,17 +30,18 @@ impl TryFrom<UserInfo> for NewUser {
 
     fn try_from(user: UserInfo) -> Result<Self, Self::Error>{
         let mut rng = rand::thread_rng();
-        let mut salt = Vec::new();
+        let mut salt = vec![0; 128];
 
         rng.try_fill_bytes(&mut salt).unwrap();
 
-        let config = argon2::Config::default();
+        let mut config = argon2::Config::default();
+        config.hash_length = 128;
+
         let hash = argon2::hash_encoded(user.password.as_ref(), &salt, &config)?;
 
         Ok(Self {
             username: user.name,
             hash,
-            salt: String::from_utf8(salt).unwrap()
         })
     }
 }
