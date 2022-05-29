@@ -4,10 +4,13 @@ use diesel::insert_into;
 use moon::{
     config::CONFIG,
 };
+use rand::distributions::Alphanumeric;
+use rand::Rng;
 
 use backend::*;
-use backend::actions::insert_new_user;
-use backend::models::UserInfo;
+use backend::actions::{get_user, insert_new_user};
+use backend::models::{User, UserInfo};
+use backend::schema::Users::username;
 use backend::server::{connect_to_db, server_start, ServerConfig};
 
 #[tokio::test]
@@ -40,8 +43,24 @@ async fn ping_works() {
     println!("Respsone: {:?}", &text);
 }
 
-#[tokio::test]
-async fn create_user_simple() {
+pub fn new_user() -> UserInfo {
+    let user_name: String = rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(7)
+        .map(char::from)
+        .collect();
+    let password: String = rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(10)
+        .map(char::from)
+        .collect();
+
+    UserInfo {
+        name: user_name,
+        password
+    }
+}
+fn debug_connect_to_db() -> server::DBPool {
     let server_config_file = Config::builder()
         .add_source(config::File::with_name("config/server.toml"))
         .build();
@@ -50,13 +69,24 @@ async fn create_user_simple() {
         .map(|f| f.try_deserialize::<ServerConfig>().expect("Invalid config file"))
         .expect("Unable to parse config file");
 
-    let db_pool = connect_to_db(&server_config).unwrap();
+    connect_to_db(&server_config).unwrap()
 
-    let user_info = UserInfo {
-        name: "CraigAllanRothwell".to_string(),
-        password: "SuperSecret123".to_string(),
-    };
+}
+#[tokio::test]
+async fn create_user_simple(){
+    let db_pool = debug_connect_to_db();
 
+    let user_info = new_user();
     insert_new_user(&db_pool.get().unwrap(), user_info).unwrap();
+}
 
+#[tokio::test]
+async fn register_then_login_simple() {
+    let db_pool = debug_connect_to_db();
+
+    let user_info = new_user();
+    insert_new_user(&db_pool.get().unwrap(), user_info.clone()).unwrap();
+
+    let result_user = get_user(&db_pool.get().unwrap(), &user_info).unwrap();
+    assert_eq!(result_user.username,user_info.name);
 }

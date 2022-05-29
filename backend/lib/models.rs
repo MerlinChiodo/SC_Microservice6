@@ -9,7 +9,7 @@ use crate::schema::Users;
 #[derive(Queryable)]
 pub struct User {
     id: u64,
-    username: String,
+    pub username: String,
     hash: String,
 }
 impl User {
@@ -45,6 +45,7 @@ impl TryFrom<UserInfo> for NewUser {
         })
     }
 }
+#[derive(Clone, Debug)]
 pub struct UserInfo {
     pub name: String,
     pub password: String,

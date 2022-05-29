@@ -110,7 +110,7 @@ async fn frontend() -> Frontend {
         .append_to_head(r#"<link rel="stylesheet" href="/_api/public/custom.css">"#)
         .body_content(r#"<div id="app"></div>"#)
 }
-type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
+pub type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
 
 #[derive(Debug)]
 pub enum ServerCreationError {
