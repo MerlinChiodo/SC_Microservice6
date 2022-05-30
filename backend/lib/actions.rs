@@ -5,8 +5,11 @@ use rand::{Rng, RngCore};
 use crate::models::{NewSession, NewUser, Session, User, UserInfo};
 use crate::schema::Sessions::dsl::Sessions;
 use crate::schema::Users::dsl::Users;
-use crate::schema::Users::username;
+use crate::schema::Users::{id, username};
 use crate::diesel::BelongingToDsl;
+use crate::schema::Sessions::{expires, token, user_id};
+use diesel::dsl::*;
+
 #[derive(Debug)]
 pub enum UserRegistrationError {
     HashError(argon2::Error),
@@ -78,7 +81,20 @@ pub fn get_session(db: &MysqlConnection, user: &User) -> Result<Session, Session
         .map_err(|err| {SessionRetrieveError::DbError(err)})?;
 
     if session.is_valid(){(Ok(session))} else {Err(SessionRetrieveError::SessionExpired)}
+}
 
+pub fn check_token(db: &MysqlConnection, _token: String) -> Result<User, SessionRetrieveError> {
+    //NOTE: 2 Queries right now since diesel only supports now filter with timestamps. Will be changed in the future
+
+    let session: Session = Sessions.filter(token.eq(_token))
+        .first(db)
+        .map_err(|err| {SessionRetrieveError::DbError(err)})?;
+
+    if !session.is_valid(){return Err(SessionRetrieveError::SessionExpired)};
+
+    Users.filter(id.eq(session.user_id))
+        .first(db)
+        .map_err(|err| {SessionRetrieveError::DbError(err)})
 }
 
 

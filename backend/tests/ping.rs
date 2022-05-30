@@ -8,7 +8,7 @@ use rand::distributions::Alphanumeric;
 use rand::Rng;
 
 use backend::*;
-use backend::actions::{get_session, get_user, insert_new_session, insert_new_user};
+use backend::actions::{check_token, get_session, get_user, insert_new_session, insert_new_user};
 use backend::models::{User, UserInfo};
 use backend::schema::Users::username;
 use backend::server::{connect_to_db, server_start, ServerConfig};
@@ -103,5 +103,23 @@ async fn basic_token_creation_works() {
 
     insert_new_session(&db_pool.get().unwrap(), &result_user).unwrap();
     let _ = get_session(&db_pool.get().unwrap(), &result_user).unwrap();
+}
 
+#[tokio::test]
+async fn basic_token_auth_works() {
+    let db_pool = debug_connect_to_db();
+
+    let user_info = new_user();
+    insert_new_user(&db_pool.get().unwrap(), user_info.clone()).unwrap();
+
+    let result_user = get_user(&db_pool.get().unwrap(), &user_info).unwrap();
+    assert_eq!(result_user.username,user_info.name);
+
+    insert_new_session(&db_pool.get().unwrap(), &result_user).unwrap();
+    let session = get_session(&db_pool.get().unwrap(), &result_user).unwrap();
+
+
+    let session_user = check_token(&db_pool.get().unwrap(), session.token).unwrap();
+
+    assert_eq!(session_user.username, result_user.username)
 }

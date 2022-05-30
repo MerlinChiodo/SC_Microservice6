@@ -30,9 +30,9 @@ impl User {
 #[belongs_to(User, foreign_key = "user_id")]
 #[table_name="Sessions"]
 pub struct Session {
-    id: u64,
-    user_id: u64,
-    token: String,
+    pub(crate) id: u64,
+    pub(crate) user_id: u64,
+    pub token: String,
     expires: chrono::NaiveDateTime
 }
 
