@@ -38,7 +38,7 @@ pub struct Session {
 
 impl Session {
     pub fn is_valid(&self) -> bool {
-        self.expires < Utc::now().naive_utc()
+        self.expires >= Utc::now().naive_utc()
     }
 }
 #[derive(Insertable)]

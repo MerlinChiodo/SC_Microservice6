@@ -73,11 +73,11 @@ pub fn insert_new_session(db: &MysqlConnection, user: &User) -> Result<(), Sessi
 
 pub fn get_session(db: &MysqlConnection, user: &User) -> Result<Session, SessionRetrieveError> {
     //TODO: Handle cases where entry was not found differently
-    let session = Session::belonging_to(user)
+    let session: Session = Session::belonging_to(user)
         .first(db)
         .map_err(|err| {SessionRetrieveError::DbError(err)})?;
 
-    if session.is_valid{(Ok(session))} else {Err(SessionRetrieveError::SessionExpired)}
+    if session.is_valid(){(Ok(session))} else {Err(SessionRetrieveError::SessionExpired)}
 
 }
 
