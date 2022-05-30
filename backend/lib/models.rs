@@ -2,11 +2,15 @@ use std::fmt;
 use std::fmt::Formatter;
 use base64::DecodeError;
 use diesel_migrations::name;
-use rand::{Error, RngCore};
+use moon::{chrono, Duration, Utc};
+use rand::{Error, Rng, RngCore};
+use rand::distributions::Distribution;
 use crate::schema::Users;
+use crate::schema::Sessions;
 
 
-#[derive(Queryable)]
+#[derive(Queryable, Identifiable)]
+#[table_name = "Users"]
 pub struct User {
     id: u64,
     pub username: String,
@@ -16,6 +20,67 @@ impl User {
     pub fn verify_with_password(&self, password: &str) -> Result<bool, argon2::Error> {
         argon2::verify_encoded(self.hash.as_str(), password.as_bytes())
     }
+}
+
+/*NOTE: The definition of a session or a session token may change in the future.
+    However this should not affect any api calls. To the user, a token may always be interpreted
+    as an opaque key.
+ */
+#[derive(Queryable, Identifiable, PartialEq, Associations)]
+#[belongs_to(User, foreign_key = "user_id")]
+#[table_name="Sessions"]
+pub struct Session {
+    id: u64,
+    user_id: u64,
+    token: String,
+    expires: chrono::NaiveDateTime
+}
+
+impl Session {
+    pub fn is_valid(&self) -> bool {
+        self.expires < Utc::now().naive_utc()
+    }
+}
+#[derive(Insertable)]
+#[table_name="Sessions"]
+pub struct NewSession {
+    user_id: u64,
+    token: String,
+    expires: chrono::NaiveDateTime
+}
+
+impl NewSession {
+    pub fn new(user: &User) -> Self {
+        //TODO: Read size from some config file maybe
+        let mut rng = rand::thread_rng();
+        //TODO: This doesn't adhere to oauth2 std
+        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                            abcdefghijklmnopqrstuvwxyz\
+                            0123456789)(*&^%$#@!~";
+        let token = (0..64)
+            .map(|_| {
+                let idx = rng.gen_range(0..CHARSET.len());
+                CHARSET[idx] as char
+            })
+            .collect();
+
+        //TODO: This is stupid. In the future we should use timestamps or SQL specific stuff
+        //TODO: Read this stuff from config file maybe
+
+        //TODO: Nothing bad should happen, however we might want to add error handling anyways
+        let expires = Utc::now()
+            .naive_utc()
+            .checked_add_signed(Duration::days(1))
+            .expect("Unable to create session");
+
+        //TODO: This feels unsafe, maybe we should not pass the user id like this
+        NewSession {
+            user_id: user.id,
+            token,
+            expires
+        }
+    }
+
 }
 
 #[derive(Insertable)]
@@ -69,3 +134,5 @@ impl From<String> for UserInfo {
         }
     }
 }
+
+//TODO: Maybe sign the token or later include additional stuff
