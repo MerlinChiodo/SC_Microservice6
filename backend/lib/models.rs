@@ -7,7 +7,7 @@ use rand::{Error, Rng, RngCore};
 use rand::distributions::Distribution;
 use crate::schema::Users;
 use crate::schema::Sessions;
-
+use serde::Deserialize;
 
 #[derive(Queryable, Identifiable)]
 #[table_name = "Users"]
@@ -45,7 +45,7 @@ impl Session {
 #[table_name="Sessions"]
 pub struct NewSession {
     user_id: u64,
-    token: String,
+    pub(crate) token: String,
     expires: chrono::NaiveDateTime
 }
 
@@ -110,7 +110,7 @@ impl TryFrom<UserInfo> for NewUser {
         })
     }
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct UserInfo {
     pub name: String,
     pub password: String,

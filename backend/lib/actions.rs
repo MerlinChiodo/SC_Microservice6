@@ -1,3 +1,7 @@
+use std::fmt;
+use std::fmt::{Display, Formatter, write};
+use actix_web::http::StatusCode;
+use actix_web::{HttpResponse, ResponseError};
 use diesel::{ExpressionMethods, MysqlConnection, QueryDsl, RunQueryDsl};
 use diesel_migrations::name;
 use diesel::associations;
@@ -16,12 +20,48 @@ pub enum UserRegistrationError {
     InsertionError(diesel::result::Error)
 }
 
+impl fmt::Display for UserRegistrationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            UserRegistrationError::HashError(e) => {
+                write!(f, "HashError: {}", e)
+            }
+            UserRegistrationError::InsertionError(e) => {
+                write!(f, "InsertionError: {}", e)
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum UserAuthError {
     DbError(diesel::result::Error),
     VerifyError(argon2::Error),
+    ServerError,
     UserNotFound,
     WrongPassword
+}
+
+impl Display for UserAuthError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            UserAuthError::UserNotFound => write!(f,"The user does not exist"),
+            UserAuthError::WrongPassword => write!(f, "The provided password does not match the username"),
+            _ => write!(f, "Internal error")
+        }
+    }
+}
+impl ResponseError for UserAuthError {
+    fn status_code(&self) -> StatusCode {
+        match self {
+            Self::UserNotFound => StatusCode::NOT_FOUND,
+            Self::WrongPassword => StatusCode::FORBIDDEN,
+            _ => StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).finish()
+    }
 }
 
 #[derive(Debug)]
@@ -29,6 +69,20 @@ pub enum SessionCreationError {
     DbError(diesel::result::Error),
 }
 
+impl Display for SessionCreationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "Unable to create session")
+    }
+}
+
+impl ResponseError for SessionCreationError {
+    fn status_code(&self) -> StatusCode {
+        StatusCode::INTERNAL_SERVER_ERROR
+    }
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::InternalServerError().finish()
+    }
+}
 #[derive(Debug)]
 pub enum SessionRetrieveError {
     DbError(diesel::result::Error),
@@ -64,14 +118,15 @@ pub fn get_user(db: &MysqlConnection, user: &UserInfo) -> Result<User, UserAuthE
     if password_correct {Ok(user_result)} else {Err(UserAuthError::WrongPassword)}
 }
 
-pub fn insert_new_session(db: &MysqlConnection, user: &User) -> Result<(), SessionCreationError> {
+pub fn insert_new_session(db: &MysqlConnection, user: &User) -> Result<String, SessionCreationError> {
+    //TODO: Invalidate old sessions or maybe don't do anything if a session already exists
     let session = NewSession::new(user);
 
     diesel::insert_into(Sessions)
         .values(&session)
         .execute(db)
         .map_err(|err| SessionCreationError::DbError(err))?;
-    Ok(())
+    Ok((session.token))
 }
 
 pub fn get_session(db: &MysqlConnection, user: &User) -> Result<Session, SessionRetrieveError> {

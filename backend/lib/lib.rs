@@ -10,6 +10,7 @@ pub mod server;
 pub mod schema;
 pub mod actions;
 pub mod models;
+pub mod endpoints;
 
 
 
