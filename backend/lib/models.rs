@@ -12,7 +12,7 @@ use serde::Deserialize;
 #[derive(Queryable, Identifiable)]
 #[table_name = "Users"]
 pub struct User {
-    id: u64,
+    pub(crate) id: u64,
     pub username: String,
     hash: String,
 }
@@ -83,6 +83,12 @@ impl NewSession {
 
 }
 
+#[derive(Deserialize)]
+pub struct Token {
+    pub code: String
+}
+
+
 #[derive(Insertable)]
 #[table_name="Users"]
 pub struct NewUser {
@@ -90,10 +96,10 @@ pub struct NewUser {
     pub hash: String,
 }
 
-impl TryFrom<UserInfo> for NewUser {
+impl TryFrom<UserIdentityInfo> for NewUser {
     type Error = argon2::Error;
 
-    fn try_from(user: UserInfo) -> Result<Self, Self::Error>{
+    fn try_from(user: UserIdentityInfo) -> Result<Self, Self::Error>{
         let mut rng = rand::thread_rng();
         let mut salt = vec![0; 128];
 
@@ -111,11 +117,11 @@ impl TryFrom<UserInfo> for NewUser {
     }
 }
 #[derive(Clone, Debug, Deserialize)]
-pub struct UserInfo {
+pub struct UserIdentityInfo {
     pub name: String,
     pub password: String,
 }
-impl fmt::Display for UserInfo {
+impl fmt::Display for UserIdentityInfo {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let b64 = format!("{}:{}", self.name, self.password);
         let result = base64::encode(&b64);
@@ -124,7 +130,7 @@ impl fmt::Display for UserInfo {
 }
 
 //TODO: Add error handling if string is malformed
-impl From<String> for UserInfo {
+impl From<String> for UserIdentityInfo {
     fn from(string: String) -> Self {
         let result:Vec<&str> = string.split(':').collect();
 

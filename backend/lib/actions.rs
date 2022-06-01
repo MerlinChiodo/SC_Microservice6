@@ -2,17 +2,19 @@ use std::fmt;
 use std::fmt::{Display, Formatter, write};
 use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, ResponseError};
+use actix_web::error::BlockingError;
 use diesel::{ExpressionMethods, MysqlConnection, QueryDsl, RunQueryDsl};
 use diesel_migrations::name;
 use diesel::associations;
 use rand::{Rng, RngCore};
-use crate::models::{NewSession, NewUser, Session, User, UserInfo};
+use crate::models::{NewSession, NewUser, Session, User, UserIdentityInfo};
 use crate::schema::Sessions::dsl::Sessions;
 use crate::schema::Users::dsl::Users;
 use crate::schema::Users::{id, username};
 use crate::diesel::BelongingToDsl;
 use crate::schema::Sessions::{expires, token, user_id};
 use diesel::dsl::*;
+
 
 #[derive(Debug)]
 pub enum UserRegistrationError {
@@ -88,9 +90,31 @@ pub enum SessionRetrieveError {
     DbError(diesel::result::Error),
     NoSessionFound,
     SessionExpired,
+    ServerError,
 }
 
-pub fn insert_new_user(db: &MysqlConnection, user: UserInfo) -> Result<(), UserRegistrationError> {
+impl Display for SessionRetrieveError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::DbError(err) => write!(f, "Unable to check session due to db error: {:?}", err),
+            Self::NoSessionFound => write!(f, "Session can't be found"),
+            Self::SessionExpired => write!(f, "The session has expired"),
+            _ => write!(f, "Server error")
+        }
+    }
+}
+impl ResponseError for SessionRetrieveError {
+    fn status_code(&self) -> StatusCode {
+        match self {
+            Self::DbError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::ServerError => StatusCode::INTERNAL_SERVER_ERROR,
+            _ => StatusCode::NOT_FOUND
+        }
+    }
+    fn error_response(&self) -> HttpResponse {HttpResponse::build(self.status_code()).finish()}
+}
+
+pub fn insert_new_user(db: &MysqlConnection, user: UserIdentityInfo) -> Result<(), UserRegistrationError> {
     let new_user = NewUser::try_from(user)
         .map_err(|err| UserRegistrationError::HashError(err))?;
 
@@ -103,7 +127,7 @@ pub fn insert_new_user(db: &MysqlConnection, user: UserInfo) -> Result<(), UserR
     Ok(())
 }
 
-pub fn get_user(db: &MysqlConnection, user: &UserInfo) -> Result<User, UserAuthError> {
+pub fn get_user(db: &MysqlConnection, user: &UserIdentityInfo) -> Result<User, UserAuthError> {
     let mut results = Users.filter(username.eq(&user.name))
         .limit(1)
         .load::<User>(db)
@@ -138,7 +162,7 @@ pub fn get_session(db: &MysqlConnection, user: &User) -> Result<Session, Session
     if session.is_valid(){(Ok(session))} else {Err(SessionRetrieveError::SessionExpired)}
 }
 
-pub fn check_token(db: &MysqlConnection, _token: String) -> Result<User, SessionRetrieveError> {
+pub fn check_token(db: &MysqlConnection, _token: &String) -> Result<User, SessionRetrieveError> {
     //NOTE: 2 Queries right now since diesel only supports now filter with timestamps. Will be changed in the future
 
     let session: Session = Sessions.filter(token.eq(_token))

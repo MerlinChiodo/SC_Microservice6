@@ -26,7 +26,7 @@ use std::net::TcpListener;
 use actix_web::web::route;
 use diesel::r2d2::ConnectionManager;
 use diesel_migrations::embed_migrations;
-use crate::endpoints::{login_simple, register_simple};
+use crate::endpoints::{login_simple, register_simple, validate_token_simple};
 
 pub type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
 
@@ -103,7 +103,8 @@ impl fmt::Display for AuthServerInfo {
 pub fn set_server_api_routes(cfg: &mut web::ServiceConfig) {
     cfg.route("/ping", web::get().to(ping))
         .route("/register", web::post().to(register_simple))
-        .route("/login", web::post().to(login_simple));
+        .route("/login", web::post().to(login_simple))
+        .route("/verify", web::post().to(validate_token_simple));
 }
 
 async fn up_msg_handler(_: UpMsgRequest<()>) {}

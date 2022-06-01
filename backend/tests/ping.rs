@@ -9,7 +9,7 @@ use rand::Rng;
 
 use backend::*;
 use backend::actions::{check_token, get_session, get_user, insert_new_session, insert_new_user};
-use backend::models::{User, UserInfo};
+use backend::models::{User, UserIdentityInfo};
 use backend::schema::Users::username;
 use backend::server::{connect_to_db, server_start, ServerConfig};
 
@@ -43,7 +43,7 @@ async fn ping_works() {
     println!("Respsone: {:?}", &text);
 }
 
-pub fn new_user() -> UserInfo {
+pub fn new_user() -> UserIdentityInfo {
     let user_name: String = rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(7)
@@ -55,7 +55,7 @@ pub fn new_user() -> UserInfo {
         .map(char::from)
         .collect();
 
-    UserInfo {
+    UserIdentityInfo {
         name: user_name,
         password
     }
@@ -119,7 +119,7 @@ async fn basic_token_auth_works() {
     let session = get_session(&db_pool.get().unwrap(), &result_user).unwrap();
 
 
-    let session_user = check_token(&db_pool.get().unwrap(), session.token).unwrap();
+    let session_user = check_token(&db_pool.get().unwrap(), &session.token).unwrap();
 
     assert_eq!(session_user.username, result_user.username)
 }
