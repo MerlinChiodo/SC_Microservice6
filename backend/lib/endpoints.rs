@@ -3,9 +3,11 @@ use actix_web::cookie::Cookie;
 use actix_web::error::BlockingError;
 use actix_web::error::Kind::Http;
 use crate::actions::{check_token, get_session, get_user, insert_new_session, insert_new_user, SessionRetrieveError, UserAuthError, UserRegistrationError};
-use crate::models::{Token, User, UserIdentityInfo};
+use crate::models::{Token, User, UserIdentityInfo, UserRegisterRequest};
 use crate::server::DBPool;
 use actix_web::post;
+use crate::error::RegistrationRequestError;
+use crate::schema::Users::username;
 
 //TODO: Use base64 encoding
 pub async fn register_simple(pool: web::Data<DBPool>, new_user: web::Form<UserIdentityInfo>) -> impl Responder {
@@ -21,6 +23,27 @@ pub async fn register_simple(pool: web::Data<DBPool>, new_user: web::Form<UserId
         }
     }
 }
+pub async fn register(pool: web::Data<DBPool>, request: web::Form<UserRegisterRequest>) -> Result<HttpResponse, RegistrationRequestError> {
+    let db = pool.get()
+        .map_err(|_|RegistrationRequestError::ServerError)?;
+
+    let request = request.into_inner();
+
+    let user_identity = UserIdentityInfo {
+        name: request.username.clone(),
+        password: request.password.clone()
+    };
+    let result = web::block(move || insert_new_user(&db, user_identity))
+        .await
+        .map_err(|_| RegistrationRequestError::ServerError)?;
+
+    //TODO: Maybe let the client handle the redirect in the future
+    match result {
+        Ok(_) => Ok(request.get_success_response()),
+        Err(_) => Ok(request.get_error_response())
+    }
+}
+
 
 //TODO: Ask for url instead of just returning a cookie
 //NOTE: THIS IS HORRIBLE

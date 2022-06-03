@@ -1,5 +1,9 @@
 use std::fmt;
-use std::fmt::Formatter;
+use std::fmt::{Display, Formatter};
+use actix_web::{HttpResponse, Responder};
+use actix_web::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use actix_web::http::header::LOCATION;
+use actix_web::web::Header;
 use base64::DecodeError;
 use diesel_migrations::name;
 use moon::{chrono, Duration, Utc};
@@ -8,6 +12,7 @@ use rand::distributions::Distribution;
 use crate::schema::Users;
 use crate::schema::Sessions;
 use serde::Deserialize;
+use crate::schema::Users::username;
 
 #[derive(Queryable, Identifiable)]
 #[table_name = "Users"]
@@ -138,6 +143,41 @@ impl From<String> for UserIdentityInfo {
             name: result[0].parse().unwrap(),
             password: result[1].parse().unwrap()
         }
+    }
+}
+impl From<UserRegisterRequest> for UserIdentityInfo {
+    fn from(req: UserRegisterRequest) -> Self {
+        Self {
+            name: req.username.clone(),
+            password: req.password.clone()
+        }
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct UserRegisterRequest {
+    pub username: String,
+    pub password: String,
+    pub redirect_success: String,
+    pub redirect_error: String,
+}
+impl Display for UserRegisterRequest {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.username)
+    }
+}
+impl UserRegisterRequest {
+    pub fn get_success_response(&self) -> HttpResponse {
+        HttpResponse::Ok()
+            .status(StatusCode::FOUND)
+            .append_header((LOCATION, HeaderValue::try_from(&self.redirect_success).unwrap()))
+            .finish()
+    }
+    pub fn get_error_response(&self) -> HttpResponse {
+        HttpResponse::Ok()
+            .status(StatusCode::FOUND)
+            .append_header((LOCATION, HeaderValue::try_from(&self.redirect_error).unwrap()))
+            .finish()
     }
 }
 

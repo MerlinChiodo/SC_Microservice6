@@ -2,6 +2,7 @@ use moon::main;
 use config::Config;
 use backend::server;
 use backend::server::ServerConfig;
+use std::thread;
 
 #[moon::main]
 async fn main() -> std::io::Result<()> {
@@ -18,6 +19,9 @@ async fn main() -> std::io::Result<()> {
     let port = listener.local_addr().unwrap().port();
     println!("{}",port);
 
-    server::server_start(server_config.unwrap_or_default(), listener).await;
+    async {
+        server::server_start(server_config.unwrap_or_default(), listener).await.unwrap();
+    }.await;
+
     Ok(())
 }

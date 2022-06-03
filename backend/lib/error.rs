@@ -1,10 +1,36 @@
+use std::fmt;
 use std::fmt::{Debug, Display, format, Formatter};
+use std::ptr::write;
+use actix_web::ResponseError;
 
 use moon::actix_web::{error, HttpResponse};
 use moon::actix_web::http::StatusCode;
 use derive_more::*;
 use serde::Deserialize;
 use moon::actix_web::http::header::ContentType;
+use crate::models::UserRegisterRequest;
+
+#[derive(Debug)]
+pub enum RegistrationRequestError {
+    ServerError,
+    InsertionError(UserRegisterRequest),
+    DuplicateUserError(UserRegisterRequest)
+}
+
+impl fmt::Display for RegistrationRequestError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "Unable to create user")
+    }
+}
+impl ResponseError for RegistrationRequestError {
+    fn status_code(&self) -> StatusCode {
+        StatusCode::INTERNAL_SERVER_ERROR
+    }
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).finish()
+    }
+}
+
 
 #[derive(Deserialize, Debug, Display)]
 pub enum AuthErrorType {

@@ -38,7 +38,10 @@ fn heading_group() -> impl Element {
 }
 
 fn register_form() -> impl Element {
-    RawHtmlEl::new("Form")
+    RawHtmlEl::new("form")
+        .attr("action", "/register")
+        .attr("enctype", "application/x-www-form-urlencoded")
+        .attr("method", "post")
         .child(
             RawHtmlEl::new("div")
                 .class("grid")
@@ -58,12 +61,12 @@ pub struct UsernameInput {
 fn username_input() -> impl Element {
     RawHtmlEl::new("input")
         .attr("type", "text")
-        .attr("name", "login")
+        .attr("name", "name")
 }
 fn mail_input() -> impl Element {
     RawHtmlEl::new("input")
         .attr("type", "text")
-        .attr("name", "login")
+        //.attr("name", "login")
 
 }
 fn cit_id_input() -> impl Element {
@@ -74,11 +77,12 @@ fn cit_id_input() -> impl Element {
 fn pw_input() -> impl Element {
     RawHtmlEl::new("input")
         .attr("placeholder", "password")
+        .attr("name", "password")
 }
 
 fn submit_button() -> impl Element {
     RawHtmlEl::new("button")
-        .attr("type", "button")
+        .attr("type", "submit")
         .attr("class", "contrast")
         .child("Registrieren")
 }
