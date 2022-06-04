@@ -1,3 +1,4 @@
+#![feature(future_join, future_poll_fn)]
 #[macro_use]
 extern crate diesel;
 

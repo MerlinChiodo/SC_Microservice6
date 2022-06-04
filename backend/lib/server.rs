@@ -1,5 +1,6 @@
+
 use std::string::String;
-use std::fmt;
+use std::{fmt, time};
 use diesel::prelude::*;
 use actix_web::get;
 use moon::{
@@ -21,15 +22,20 @@ use moon::{
 };
 use self::config::Config;
 use std::fmt::{Display, format, Formatter, write};
+use std::future::join;
 use secrecy::Secret;
 use serde::{Deserialize, Serialize};
 use std::net::TcpListener;
 use actix_web::web::route;
 use diesel::r2d2::ConnectionManager;
 use diesel_migrations::embed_migrations;
+use lapin::options::BasicConsumeOptions;
+use lapin::types::FieldTable;
+use moon::futures::StreamExt;
 use crate::endpoints::{login, login_simple, register, validate_token_simple};
 
 pub type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
+pub type RMQPool = deadpool::managed::Object<deadpool_lapin::Manager>;
 
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -92,6 +98,7 @@ impl Default for AuthServerInfo {
         }
     }
 }
+
 impl fmt::Display for AuthServerInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -130,7 +137,7 @@ async fn frontend() -> Frontend {
 #[derive(Debug)]
 pub enum ServerCreationError {
     DBError(DBConnectionError),
-    D
+    RMQError(RMQConnectionError)
 }
 
 #[derive(Debug)]
@@ -170,7 +177,6 @@ pub fn connect_to_rmq(config: &ServerConfig) -> Result<deadpool_lapin::Pool, RMQ
             rmq.to_string()
         }
     };
-
     let rmq_connection_options = lapin::ConnectionProperties::default()
         .with_executor(tokio_executor_trait::Tokio::current());
 
@@ -180,6 +186,29 @@ pub fn connect_to_rmq(config: &ServerConfig) -> Result<deadpool_lapin::Pool, RMQ
         .max_size(10)
         .build()
         .map_err(|err| RMQConnectionError::ConnectionError(err))
+}
+pub async fn rmg_get_message(pool: deadpool_lapin::Pool) -> Result<(), lapin::Error> {
+    //TODO: Add proper error handling
+    let connection = pool.get().await.unwrap();
+    let channel = connection.create_channel().await?;
+    let mut consumer = channel.basic_consume("smartauth", "test",  BasicConsumeOptions::default(), FieldTable::default())
+        .await?;
+
+    while let(Some(message)) = consumer.next().await {
+        println!("Blub");
+    }
+    Ok(())
+}
+
+pub async fn rmg_listen(pool: deadpool_lapin::Pool) -> Result<(), lapin::Error> {
+    let mut retry = tokio::time::interval(time::Duration::from_secs(5));
+    loop {
+        retry.tick().await;
+        match rmg_get_message(pool.clone()).await {
+            Ok(_) => println!("Got message success"),
+            Err(e) => println!("rmq: uh oh")
+        };
+    }
 }
 
 pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result<(), ServerCreationError>{
@@ -213,10 +242,10 @@ pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result
 
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(db_pool.clone()))
-            .app_data(web::Data::new(rmq_pool.clone()))
     };
 
-    start_with_app(frontend, up_msg_handler, app, set_server_api_routes).await.unwrap();
+    join!(async {start_with_app(frontend, up_msg_handler, app, set_server_api_routes).await.unwrap()}, rmg_listen(rmq_pool.clone())).await;
+
     Ok(())
 }
 

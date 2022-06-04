@@ -15,14 +15,13 @@ use crate::diesel::BelongingToDsl;
 use crate::schema::Sessions::{expires, token, user_id};
 use diesel::dsl::*;
 
-
 #[derive(Debug)]
 pub enum UserRegistrationError {
     HashError(argon2::Error),
     InsertionError(diesel::result::Error)
 }
 
-impl fmt::Display for UserRegistrationError {
+impl Display for UserRegistrationError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             UserRegistrationError::HashError(e) => {
@@ -120,7 +119,7 @@ pub fn insert_new_user(db: &MysqlConnection, user: UserIdentityInfo) -> Result<(
 
 
     //TODO: Handle specific insertion errors
-    diesel::insert_into(Users)
+    insert_into(Users)
         .values(&new_user)
         .execute(db)
         .map_err(|err| UserRegistrationError::InsertionError(err))?;
@@ -141,7 +140,6 @@ pub fn get_user(db: &MysqlConnection, user: &UserIdentityInfo) -> Result<User, U
 
     if password_correct {Ok(user_result)} else {Err(UserAuthError::WrongPassword)}
 }
-
 pub fn insert_new_session(db: &MysqlConnection, user: &User) -> Result<String, SessionCreationError> {
     //TODO: Invalidate old sessions or maybe don't do anything if a session already exists
     let session = NewSession::new(user);
@@ -164,7 +162,6 @@ pub fn get_session(db: &MysqlConnection, user: &User) -> Result<Session, Session
 
 pub fn check_token(db: &MysqlConnection, _token: &String) -> Result<User, SessionRetrieveError> {
     //NOTE: 2 Queries right now since diesel only supports now filter with timestamps. Will be changed in the future
-
     let session: Session = Sessions.filter(token.eq(_token))
         .first(db)
         .map_err(|err| {SessionRetrieveError::DbError(err)})?;
@@ -175,6 +172,3 @@ pub fn check_token(db: &MysqlConnection, _token: &String) -> Result<User, Sessio
         .first(db)
         .map_err(|err| {SessionRetrieveError::DbError(err)})
 }
-
-
-

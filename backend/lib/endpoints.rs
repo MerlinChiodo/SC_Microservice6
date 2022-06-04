@@ -96,6 +96,4 @@ pub async fn validate_token_simple(pool: web::Data<DBPool>, token: web::Form<Tok
 
     let user = user?;
     Ok(HttpResponse::Ok().json((user.id, user.username)))
-
-
 }

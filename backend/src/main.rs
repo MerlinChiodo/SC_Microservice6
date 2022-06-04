@@ -22,6 +22,5 @@ async fn main() -> std::io::Result<()> {
     async {
         server::server_start(server_config.unwrap_or_default(), listener).await.unwrap();
     }.await;
-
     Ok(())
 }
