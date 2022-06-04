@@ -1,6 +1,7 @@
-
+use std::string::String;
 use std::fmt;
 use diesel::prelude::*;
+use actix_web::get;
 use moon::{
     actix_cors::Cors,
     actix_web::{
@@ -26,7 +27,7 @@ use std::net::TcpListener;
 use actix_web::web::route;
 use diesel::r2d2::ConnectionManager;
 use diesel_migrations::embed_migrations;
-use crate::endpoints::{login_simple, register, register_simple, validate_token_simple};
+use crate::endpoints::{login, login_simple, register, validate_token_simple};
 
 pub type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
 
@@ -37,6 +38,7 @@ pub struct ServerConfig {
     db: Option<DatabaseInfo>,
     rmq: Option<RabbitMQServerInfo>
 }
+
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
@@ -100,11 +102,18 @@ impl fmt::Display for AuthServerInfo {
     }
 }
 
+#[get("/onLogin/{token}")]
+pub async fn on_login_test(token: web::Path<String>) -> impl Responder {
+    token.into_inner()
+}
+
 pub fn set_server_api_routes(cfg: &mut web::ServiceConfig) {
     cfg.route("/ping", web::get().to(ping))
         .route("/register", web::post().to(register))
-        .route("/login", web::post().to(login_simple))
-        .route("/verify", web::post().to(validate_token_simple));
+        .route("/login", web::post().to(login))
+        .route("/verify", web::post().to(validate_token_simple))
+        .route("/test", web::get().to(|| async {"Hey"}))
+        .service(on_login_test);
 }
 
 async fn up_msg_handler(_: UpMsgRequest<()>) {}
@@ -121,7 +130,7 @@ async fn frontend() -> Frontend {
 #[derive(Debug)]
 pub enum ServerCreationError {
     DBError(DBConnectionError),
-    RMQError(RMQConnectionError),
+    D
 }
 
 #[derive(Debug)]

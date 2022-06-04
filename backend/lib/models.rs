@@ -166,6 +166,7 @@ impl Display for UserRegisterRequest {
         write!(f, "{}", self.username)
     }
 }
+
 impl UserRegisterRequest {
     pub fn get_success_response(&self) -> HttpResponse {
         HttpResponse::Ok()
@@ -177,6 +178,38 @@ impl UserRegisterRequest {
         HttpResponse::Ok()
             .status(StatusCode::FOUND)
             .append_header((LOCATION, HeaderValue::try_from(&self.redirect_error).unwrap()))
+            .finish()
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct UserLoginRequest {
+    pub username: String,
+    pub password: String,
+
+    pub redirect_success: String,
+    pub redirect_error: String,
+}
+
+impl Display for UserLoginRequest{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.username)
+    }
+}
+
+impl UserLoginRequest {
+    pub fn get_success_response(&self, token: String) -> HttpResponse {
+        HttpResponse::Ok()
+            .status(StatusCode::FOUND)
+            .append_header((LOCATION, HeaderValue::try_from(format!("{}/{}", &self.redirect_success, token)).unwrap()))
+            .finish()
+    }
+
+    //TODO: Add error info
+    pub fn get_error_response(&self) -> HttpResponse {
+        HttpResponse::Ok()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .append_header((LOCATION, HeaderValue::try_from(&self.redirect_success).unwrap()))
             .finish()
     }
 }
