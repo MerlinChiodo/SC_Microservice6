@@ -28,9 +28,11 @@ use std::net::TcpListener;
 use actix_web::web::route;
 use diesel::r2d2::ConnectionManager;
 use diesel_migrations::embed_migrations;
+use lapin::message::Delivery;
 use lapin::options::{BasicAckOptions, BasicConsumeOptions};
 use lapin::types::FieldTable;
 use moon::futures::StreamExt;
+use serde_json::Value;
 use crate::endpoints::{login, login_simple, register, validate_token_simple};
 
 pub type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
@@ -188,7 +190,7 @@ pub fn connect_to_rmq(config: &ServerConfig) -> Result<deadpool_lapin::Pool, RMQ
         .map_err(|err| RMQConnectionError::ConnectionError(err))
 }
 
-pub async fn rmg_get_message(pool: deadpool_lapin::Pool, queue_name: &str, consumer_name: &str) -> Result<(), lapin::Error> {
+pub async fn rmg_handle_messages(pool: deadpool_lapin::Pool, queue_name: &str, consumer_name: &str) -> Result<(), lapin::Error> {
     //TODO: Add proper error handling
     let connection = pool.get().await.unwrap();
     let channel = connection.create_channel().await?;
@@ -199,10 +201,20 @@ pub async fn rmg_get_message(pool: deadpool_lapin::Pool, queue_name: &str, consu
         .await?;
 
     while let(Some(message)) = consumer.next().await {
-        let message = message.expect("Error");
+        let message: Delivery = message?;
+
+        let json_data: Value = serde_json::from_slice(&message.data).unwrap();
+
+        //NOTE: Since I can't test any of this, I'll just assume that the data from the spec is still valid...
+        if json_data["event_name"] != "Neuer Bürger" && json_data["event_id"] != 1001 {
+            println!("Recieved an invalid event");
+            continue;
+        }
+
+        //TODO Create pending citizen reg request
         message
             .ack(BasicAckOptions::default())
-            .await?;
+            .await?
     }
     Ok(())
 }
@@ -211,7 +223,7 @@ pub async fn rmg_listen(pool: deadpool_lapin::Pool) -> Result<(), lapin::Error> 
     let mut retry = tokio::time::interval(time::Duration::from_secs(5));
     loop {
         retry.tick().await;
-        match rmg_get_message(pool.clone(), "smartauth", "new_citizen_consumer").await {
+        match rmg_handle_messages(pool.clone(), "smartauth", "new_citizen_consumer").await {
             Ok(_) => println!("Got message success"),
             Err(e) => println!("rmq: uh oh")
         };

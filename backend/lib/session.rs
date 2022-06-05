@@ -5,6 +5,7 @@ use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, ResponseError};
 use moon::{chrono, Utc};
 use rand::Rng;
+use crate::schema::Sessions;
 
 #[derive(Debug)]
 pub enum SessionCreationError {
@@ -32,14 +33,16 @@ pub trait SessionHolder {
     fn get_id(&self) -> u64;
 }
 
+#[derive(Insertable)]
+#[table_name="Sessions"]
 pub struct NewSession {
-    user_id: u64,
-    token: String,
-    expires: chrono::NaiveDateTime
+    pub user_id: u64,
+    pub(crate) token: String,
+    pub expires: chrono::NaiveDateTime
 }
 
 impl NewSession {
-    pub fn new(holder: impl SessionHolder) -> Self {
+    pub fn new(holder: &impl SessionHolder) -> Self {
         let mut rng = rand::thread_rng();
         //TODO: This doesn't adhere to oauth2 std
         const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\

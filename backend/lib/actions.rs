@@ -7,14 +7,14 @@ use diesel::{ExpressionMethods, MysqlConnection, QueryDsl, RunQueryDsl};
 use diesel_migrations::name;
 use diesel::associations;
 use rand::{Rng, RngCore};
-use crate::models::{NewSession, Session};
+use crate::models::{Session};
 use crate::schema::Sessions::dsl::Sessions;
 use crate::schema::Users::dsl::Users;
 use crate::schema::Users::{id, username};
 use crate::diesel::BelongingToDsl;
 use crate::schema::Sessions::{expires, token, user_id};
 use diesel::dsl::*;
-use crate::session::{SessionCreationError, SessionHolder};
+use crate::session::{NewSession, SessionCreationError, SessionHolder};
 use crate::user::{NewUser, User, UserInfo};
 
 #[derive(Debug)]

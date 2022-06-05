@@ -70,6 +70,7 @@ impl UserInfo {
         self.username.len() >= 5 &&  self.username.len() <= 255 && self.password.len() >= 10
     }
 }
+
 #[derive(Insertable)]
 #[table_name="Users"]
 pub struct NewUser {
@@ -77,7 +78,7 @@ pub struct NewUser {
     pub hash: String,
 }
 impl NewUser {
-    pub fn new(user: &UserInfo) -> Result<Self, argon2::Error> {
+    pub fn new(info: &impl ResourceOwnerCredentials) -> Result<Self, argon2::Error> {
         let mut rng = rand::thread_rng();
         let mut salt = vec![0; 128];
 
@@ -86,11 +87,31 @@ impl NewUser {
         let mut config = argon2::Config::default();
         config.hash_length = 128;
 
-        let hash = argon2::hash_encoded(user.password.as_ref(), &salt, &config)?;
+        let hash = argon2::hash_encoded(info.get_secret().as_bytes(), &salt, &config)?;
 
         Ok(Self {
-            username: user.username.clone(),
+            username: String::from(info.get_key()),
             hash,
         })
     }
 }
+
+/*
+#[derive(Queryable, Identifiable, PartialEq)]
+pub struct PendingUser {
+    id: u64,
+    citizen: u64,
+    code: String
+}
+
+#[derive(Insertable)]
+#[table_name="PendingUsers"]
+pub struct NewPendingUser {
+    citizen: u64,
+    code: String
+}
+
+impl NewPendingUser {
+}
+
+ */

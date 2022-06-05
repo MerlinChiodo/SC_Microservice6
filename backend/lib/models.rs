@@ -35,54 +35,10 @@ impl Session {
         self.expires >= Utc::now().naive_utc()
     }
 }
-#[derive(Insertable)]
-#[table_name="Sessions"]
-pub struct NewSession {
-    user_id: u64,
-    pub(crate) token: String,
-    expires: chrono::NaiveDateTime
-}
-
-impl NewSession {
-    pub fn new(user: &User) -> Self {
-        //TODO: Read size from some config file maybe
-        let mut rng = rand::thread_rng();
-        //TODO: This doesn't adhere to oauth2 std
-        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
-                            abcdefghijklmnopqrstuvwxyz\
-                            0123456789)(*&^%$#@!~";
-        let token = (0..64)
-            .map(|_| {
-                let idx = rng.gen_range(0..CHARSET.len());
-                CHARSET[idx] as char
-            })
-            .collect();
-
-        //TODO: This is stupid. In the future we should use timestamps or SQL specific stuff
-        //TODO: Read this stuff from config file maybe
-
-        //TODO: Nothing bad should happen, however we might want to add error handling anyways
-        let expires = Utc::now()
-            .naive_utc()
-            .checked_add_signed(Duration::days(1))
-            .expect("Unable to create session");
-
-        //TODO: This feels unsafe, maybe we should not pass the user id like this
-        NewSession {
-            user_id: user.id,
-            token,
-            expires
-        }
-    }
-
-}
-
 #[derive(Deserialize)]
 pub struct Token {
     pub code: String
 }
-
-
 
 #[derive(Deserialize, Debug)]
 pub struct UserLoginRequest {
