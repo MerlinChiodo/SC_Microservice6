@@ -13,19 +13,8 @@ use crate::schema::Users;
 use crate::schema::Sessions;
 use serde::Deserialize;
 use crate::schema::Users::username;
+use crate::user::{User, UserInfo};
 
-#[derive(Queryable, Identifiable)]
-#[table_name = "Users"]
-pub struct User {
-    pub(crate) id: u64,
-    pub username: String,
-    hash: String,
-}
-impl User {
-    pub fn verify_with_password(&self, password: &str) -> Result<bool, argon2::Error> {
-        argon2::verify_encoded(self.hash.as_str(), password.as_bytes())
-    }
-}
 
 /*NOTE: The definition of a session or a session token may change in the future.
     However this should not affect any api calls. To the user, a token may always be interpreted
@@ -94,93 +83,6 @@ pub struct Token {
 }
 
 
-#[derive(Insertable)]
-#[table_name="Users"]
-pub struct NewUser {
-    pub username: String,
-    pub hash: String,
-}
-
-impl TryFrom<UserIdentityInfo> for NewUser {
-    type Error = argon2::Error;
-
-    fn try_from(user: UserIdentityInfo) -> Result<Self, Self::Error>{
-        let mut rng = rand::thread_rng();
-        let mut salt = vec![0; 128];
-
-        rng.try_fill_bytes(&mut salt).unwrap();
-
-        let mut config = argon2::Config::default();
-        config.hash_length = 128;
-
-        let hash = argon2::hash_encoded(user.password.as_ref(), &salt, &config)?;
-
-        Ok(Self {
-            username: user.name,
-            hash,
-        })
-    }
-}
-#[derive(Clone, Debug, Deserialize)]
-pub struct UserIdentityInfo {
-    pub name: String,
-    pub password: String,
-}
-impl fmt::Display for UserIdentityInfo {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let b64 = format!("{}:{}", self.name, self.password);
-        let result = base64::encode(&b64);
-        write!(f, "{}", result)
-    }
-}
-
-//TODO: Add error handling if string is malformed
-impl From<String> for UserIdentityInfo {
-    fn from(string: String) -> Self {
-        let result:Vec<&str> = string.split(':').collect();
-
-        Self {
-            name: result[0].parse().unwrap(),
-            password: result[1].parse().unwrap()
-        }
-    }
-}
-impl From<UserRegisterRequest> for UserIdentityInfo {
-    fn from(req: UserRegisterRequest) -> Self {
-        Self {
-            name: req.username.clone(),
-            password: req.password.clone()
-        }
-    }
-}
-
-#[derive(Deserialize, Debug)]
-pub struct UserRegisterRequest {
-    pub username: String,
-    pub password: String,
-    pub redirect_success: String,
-    pub redirect_error: String,
-}
-impl Display for UserRegisterRequest {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.username)
-    }
-}
-
-impl UserRegisterRequest {
-    pub fn get_success_response(&self) -> HttpResponse {
-        HttpResponse::Ok()
-            .status(StatusCode::FOUND)
-            .append_header((LOCATION, HeaderValue::try_from(&self.redirect_success).unwrap()))
-            .finish()
-    }
-    pub fn get_error_response(&self) -> HttpResponse {
-        HttpResponse::Ok()
-            .status(StatusCode::FOUND)
-            .append_header((LOCATION, HeaderValue::try_from(&self.redirect_error).unwrap()))
-            .finish()
-    }
-}
 
 #[derive(Deserialize, Debug)]
 pub struct UserLoginRequest {

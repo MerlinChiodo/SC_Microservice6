@@ -3,21 +3,23 @@ use actix_web::cookie::Cookie;
 use actix_web::error::BlockingError;
 use actix_web::error::Kind::Http;
 use crate::actions::{check_token, get_session, get_user, insert_new_session, insert_new_user, SessionRetrieveError, UserAuthError, UserRegistrationError};
-use crate::models::{Token, User, UserIdentityInfo, UserLoginRequest, UserRegisterRequest};
+use crate::models::{Token, UserLoginRequest};
 use crate::server::DBPool;
 use actix_web::post;
 use crate::error::RegistrationRequestError;
+use crate::request::{RegistrationRequest, Request};
 use crate::schema::Users::username;
+use crate::user::{UserInfo};
 
 pub async fn register(pool: web::Data<DBPool>,
-                      request: web::Form<UserRegisterRequest>) -> Result<HttpResponse, RegistrationRequestError> {
+                      request: web::Form<RegistrationRequest>) -> Result<HttpResponse, RegistrationRequestError> {
     let db = pool.get()
         .map_err(|_|RegistrationRequestError::ServerError)?;
     let request = request.into_inner();
 
-    let user_identity = UserIdentityInfo {
-        name: request.username.clone(),
-        password: request.password.clone()
+    let user_identity = UserInfo {
+        username: request.info.username.clone(),
+        password: request.info.password.clone()
     };
 
     let result = web::block(move || insert_new_user(&db, user_identity))
@@ -34,8 +36,8 @@ pub async fn register(pool: web::Data<DBPool>,
 pub async fn login(pool: web::Data<DBPool>, request: web::Form<UserLoginRequest>) -> Result<HttpResponse, UserAuthError> {
 
     let request = request.into_inner();
-    let user_info = UserIdentityInfo {
-        name: request.username.clone(),
+    let user_info = UserInfo {
+        username: request.username.clone(),
         password: request.password.clone()
     };
     let db = pool.get()
@@ -65,7 +67,7 @@ pub async fn login(pool: web::Data<DBPool>, request: web::Form<UserLoginRequest>
 
 //TODO: Ask for url instead of just returning a cookie
 //NOTE: THIS IS HORRIBLE
-pub async fn login_simple(pool: web::Data<DBPool>, user: web::Form<UserIdentityInfo>) -> Result<HttpResponse, UserAuthError> {
+pub async fn login_simple(pool: web::Data<DBPool>, user: web::Form<UserInfo>) -> Result<HttpResponse, UserAuthError> {
     //TODO: This currently requires a lot of different queries, might perhaps be very slow
     let user_info = user.into_inner();
     let db = pool.get().expect("Unable to get db connection");

@@ -1,4 +1,3 @@
-
 use std::string::String;
 use std::{fmt, time};
 use diesel::prelude::*;
@@ -29,7 +28,7 @@ use std::net::TcpListener;
 use actix_web::web::route;
 use diesel::r2d2::ConnectionManager;
 use diesel_migrations::embed_migrations;
-use lapin::options::BasicConsumeOptions;
+use lapin::options::{BasicAckOptions, BasicConsumeOptions};
 use lapin::types::FieldTable;
 use moon::futures::StreamExt;
 use crate::endpoints::{login, login_simple, register, validate_token_simple};
@@ -151,6 +150,7 @@ pub enum RMQConnectionError {
     MissingSettings,
     ConnectionError(deadpool_lapin::BuildError)
 }
+
 pub fn connect_to_db(config: &ServerConfig) -> Result<DBPool, DBConnectionError> {
     let db_url = match &config.db {
         None => {
@@ -187,15 +187,22 @@ pub fn connect_to_rmq(config: &ServerConfig) -> Result<deadpool_lapin::Pool, RMQ
         .build()
         .map_err(|err| RMQConnectionError::ConnectionError(err))
 }
-pub async fn rmg_get_message(pool: deadpool_lapin::Pool) -> Result<(), lapin::Error> {
+
+pub async fn rmg_get_message(pool: deadpool_lapin::Pool, queue_name: &str, consumer_name: &str) -> Result<(), lapin::Error> {
     //TODO: Add proper error handling
     let connection = pool.get().await.unwrap();
     let channel = connection.create_channel().await?;
-    let mut consumer = channel.basic_consume("smartauth", "test",  BasicConsumeOptions::default(), FieldTable::default())
+    let mut consumer = channel.basic_consume(queue_name,
+                                             consumer_name,
+                                             BasicConsumeOptions::default(),
+                                             FieldTable::default())
         .await?;
 
     while let(Some(message)) = consumer.next().await {
-        println!("Blub");
+        let message = message.expect("Error");
+        message
+            .ack(BasicAckOptions::default())
+            .await?;
     }
     Ok(())
 }
@@ -204,7 +211,7 @@ pub async fn rmg_listen(pool: deadpool_lapin::Pool) -> Result<(), lapin::Error> 
     let mut retry = tokio::time::interval(time::Duration::from_secs(5));
     loop {
         retry.tick().await;
-        match rmg_get_message(pool.clone()).await {
+        match rmg_get_message(pool.clone(), "smartauth", "new_citizen_consumer").await {
             Ok(_) => println!("Got message success"),
             Err(e) => println!("rmq: uh oh")
         };

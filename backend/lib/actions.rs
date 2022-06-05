@@ -7,13 +7,15 @@ use diesel::{ExpressionMethods, MysqlConnection, QueryDsl, RunQueryDsl};
 use diesel_migrations::name;
 use diesel::associations;
 use rand::{Rng, RngCore};
-use crate::models::{NewSession, NewUser, Session, User, UserIdentityInfo};
+use crate::models::{NewSession, Session};
 use crate::schema::Sessions::dsl::Sessions;
 use crate::schema::Users::dsl::Users;
 use crate::schema::Users::{id, username};
 use crate::diesel::BelongingToDsl;
 use crate::schema::Sessions::{expires, token, user_id};
 use diesel::dsl::*;
+use crate::session::{SessionCreationError, SessionHolder};
+use crate::user::{NewUser, User, UserInfo};
 
 #[derive(Debug)]
 pub enum UserRegistrationError {
@@ -37,7 +39,7 @@ impl Display for UserRegistrationError {
 #[derive(Debug)]
 pub enum UserAuthError {
     DbError(diesel::result::Error),
-    VerifyError(argon2::Error),
+    VerifyError(SessionCreationError),
     ServerError,
     UserNotFound,
     WrongPassword
@@ -65,25 +67,7 @@ impl ResponseError for UserAuthError {
     }
 }
 
-#[derive(Debug)]
-pub enum SessionCreationError {
-    DbError(diesel::result::Error),
-}
 
-impl Display for SessionCreationError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "Unable to create session")
-    }
-}
-
-impl ResponseError for SessionCreationError {
-    fn status_code(&self) -> StatusCode {
-        StatusCode::INTERNAL_SERVER_ERROR
-    }
-    fn error_response(&self) -> HttpResponse {
-        HttpResponse::InternalServerError().finish()
-    }
-}
 #[derive(Debug)]
 pub enum SessionRetrieveError {
     DbError(diesel::result::Error),
@@ -113,8 +97,8 @@ impl ResponseError for SessionRetrieveError {
     fn error_response(&self) -> HttpResponse {HttpResponse::build(self.status_code()).finish()}
 }
 
-pub fn insert_new_user(db: &MysqlConnection, user: UserIdentityInfo) -> Result<(), UserRegistrationError> {
-    let new_user = NewUser::try_from(user)
+pub fn insert_new_user(db: &MysqlConnection, user: UserInfo) -> Result<(), UserRegistrationError> {
+    let new_user = NewUser::new(&user)
         .map_err(|err| UserRegistrationError::HashError(err))?;
 
 
@@ -126,8 +110,8 @@ pub fn insert_new_user(db: &MysqlConnection, user: UserIdentityInfo) -> Result<(
     Ok(())
 }
 
-pub fn get_user(db: &MysqlConnection, user: &UserIdentityInfo) -> Result<User, UserAuthError> {
-    let mut results = Users.filter(username.eq(&user.name))
+pub fn get_user(db: &MysqlConnection, user: &UserInfo) -> Result<User, UserAuthError> {
+    let mut results = Users.filter(username.eq(&user.username))
         .limit(1)
         .load::<User>(db)
         .map_err(|err| UserAuthError::DbError(err))?;
@@ -135,7 +119,7 @@ pub fn get_user(db: &MysqlConnection, user: &UserIdentityInfo) -> Result<User, U
         .ok_or(UserAuthError::UserNotFound)?;
 
     let password_correct = user_result
-        .verify_with_password(user.password.as_str())
+        .verify(user.password.as_str())
         .map_err(|err| UserAuthError::VerifyError(err))?;
 
     if password_correct {Ok(user_result)} else {Err(UserAuthError::WrongPassword)}
