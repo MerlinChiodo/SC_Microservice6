@@ -2,12 +2,13 @@
 version = "0.1.0"
 name = "backend"
 edition = "2021"
+
 [lib]
 path = "lib/lib.rs"
 
 [[bin]]
 path = "src/main.rs"
-name = "SmartCity_Auth"
+name = "backend"
 
 [dependencies]
 moon = { git = "https://github.com/MoonZoon/MoonZoon", rev = "15cb619faca5f78a47e08f4af4bfa595f0eb64b1" }
@@ -19,7 +20,13 @@ reqwest = { version = "0.11", features = ["json"]}
 actix-web = "4.0.0-beta.10"
 config = "0.13.1"
 derive_more = "0.99.0"
-diesel = { version = "1.4.8", features = ["mysql", "r2d2"] }
+diesel = { version = "1.4.8", features = ["mysql", "r2d2", "chrono"] }
 lapin = "2.1.1"
 executor-trait = "2.1.0"
 tokio-executor-trait = "2.1.0"
+deadpool = {version = "0.9.5", features = ["managed", "rt_tokio_1", "serde"]}
+deadpool-lapin = "0.10.0"
+diesel_migrations = "1.4.0"
+rand = "0.8.5"
+rust-argon2 = "1.0.0"
+base64 = "0.13.0"

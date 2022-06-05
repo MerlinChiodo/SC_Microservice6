@@ -1,10 +1,34 @@
-use std::fmt::{Debug, Display, format, Formatter};
+use std::fmt;
+use actix_web::ResponseError;
 
 use moon::actix_web::{error, HttpResponse};
 use moon::actix_web::http::StatusCode;
 use derive_more::*;
 use serde::Deserialize;
 use moon::actix_web::http::header::ContentType;
+use crate::request::RegistrationRequest;
+
+#[derive(Debug)]
+pub enum RegistrationRequestError {
+    ServerError,
+    InsertionError(RegistrationRequest),
+    DuplicateUserError(RegistrationRequest)
+}
+
+impl fmt::Display for RegistrationRequestError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Unable to create user")
+    }
+}
+impl ResponseError for RegistrationRequestError {
+    fn status_code(&self) -> StatusCode {
+        StatusCode::INTERNAL_SERVER_ERROR
+    }
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).finish()
+    }
+}
+
 
 #[derive(Deserialize, Debug, Display)]
 pub enum AuthErrorType {
@@ -29,14 +53,14 @@ pub struct AuthError {
     pub(crate) error_uri: Option<String>
 }
 
-impl Debug for AuthError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for AuthError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         todo!()
     }
 }
 
-impl Display for AuthError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for AuthError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }

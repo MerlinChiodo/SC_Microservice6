@@ -1,5 +1,7 @@
-use std::fmt;
+use std::string::String;
+use std::{fmt, time};
 use diesel::prelude::*;
+use actix_web::get;
 use moon::{
     actix_cors::Cors,
     actix_web::{
@@ -19,11 +21,23 @@ use moon::{
 };
 use self::config::Config;
 use std::fmt::{Display, format, Formatter, write};
+use std::future::join;
 use secrecy::Secret;
 use serde::{Deserialize, Serialize};
 use std::net::TcpListener;
-use diesel::{Connection, r2d2};
+use actix_web::web::route;
 use diesel::r2d2::ConnectionManager;
+use diesel_migrations::embed_migrations;
+use lapin::message::Delivery;
+use lapin::options::{BasicAckOptions, BasicConsumeOptions};
+use lapin::types::FieldTable;
+use moon::futures::StreamExt;
+use serde_json::Value;
+use crate::endpoints::{login, login_simple, register, validate_token_simple};
+
+pub type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
+pub type RMQPool = deadpool::managed::Object<deadpool_lapin::Manager>;
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServerConfig {
@@ -32,6 +46,15 @@ pub struct ServerConfig {
     rmq: Option<RabbitMQServerInfo>
 }
 
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            info: AuthServerInfo::default(),
+            db: None,
+            rmq: None,
+        }
+    }
+}
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DatabaseInfo {
     host: String,
@@ -76,6 +99,7 @@ impl Default for AuthServerInfo {
         }
     }
 }
+
 impl fmt::Display for AuthServerInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -86,8 +110,18 @@ impl fmt::Display for AuthServerInfo {
     }
 }
 
+#[get("/onLogin/{token}")]
+pub async fn on_login_test(token: web::Path<String>) -> impl Responder {
+    token.into_inner()
+}
+
 pub fn set_server_api_routes(cfg: &mut web::ServiceConfig) {
-    cfg.route("/ping", web::get().to(ping));
+    cfg.route("/ping", web::get().to(ping))
+        .route("/register", web::post().to(register))
+        .route("/login", web::post().to(login))
+        .route("/verify", web::post().to(validate_token_simple))
+        .route("/test", web::get().to(|| async {"Hey"}))
+        .service(on_login_test);
 }
 
 async fn up_msg_handler(_: UpMsgRequest<()>) {}
@@ -101,35 +135,107 @@ async fn frontend() -> Frontend {
         .body_content(r#"<div id="app"></div>"#)
 }
 
-pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result<(), std::io::Error> {
+#[derive(Debug)]
+pub enum ServerCreationError {
+    DBError(DBConnectionError),
+    RMQError(RMQConnectionError)
+}
+
+#[derive(Debug)]
+pub enum DBConnectionError {
+    MissingSettings,
+    //TODO: This is bad, fix it!
+    ConnectionError(String)
+}
+#[derive(Debug)]
+pub enum RMQConnectionError {
+    MissingSettings,
+    ConnectionError(deadpool_lapin::BuildError)
+}
+
+pub fn connect_to_db(config: &ServerConfig) -> Result<DBPool, DBConnectionError> {
     let db_url = match &config.db {
         None => {
             std::env::var("DATABASE_URL")
-                .expect("Unable to find db connection settings")
+                .map_err(|_| DBConnectionError::MissingSettings)?
         }
         Some(db) => {
             db.to_string()
         }
     };
-
     let db_manager = ConnectionManager::<MysqlConnection>::new(db_url);
-    let db_pool = r2d2::Pool::builder()
-        .build(db_manager)
-        .unwrap_or_else(|e| panic!("Unable to connect to db: {}", e.to_string()));
 
+     diesel::r2d2::Pool::builder().build(db_manager)
+         .map_err(|err| DBConnectionError::ConnectionError(err.to_string()))
+}
+
+pub fn connect_to_rmq(config: &ServerConfig) -> Result<deadpool_lapin::Pool, RMQConnectionError> {
     let rmq_url = match &config.rmq {
         None => {
             std::env::var("AMQP_ADDR")
-                .expect("Unable to find rabbitmq connection settings")
+                .map_err(|_| RMQConnectionError::MissingSettings)?
         }
         Some(rmq) => {
             rmq.to_string()
         }
     };
-
     let rmq_connection_options = lapin::ConnectionProperties::default()
         .with_executor(tokio_executor_trait::Tokio::current());
 
+    let rmq_manager = deadpool_lapin::Manager::new(rmq_url, rmq_connection_options);
+
+    deadpool::managed::Pool::builder(rmq_manager)
+        .max_size(10)
+        .build()
+        .map_err(|err| RMQConnectionError::ConnectionError(err))
+}
+
+pub async fn rmg_handle_messages(pool: deadpool_lapin::Pool, queue_name: &str, consumer_name: &str) -> Result<(), lapin::Error> {
+    //TODO: Add proper error handling
+    let connection = pool.get().await.unwrap();
+    let channel = connection.create_channel().await?;
+    let mut consumer = channel.basic_consume(queue_name,
+                                             consumer_name,
+                                             BasicConsumeOptions::default(),
+                                             FieldTable::default())
+        .await?;
+
+    while let(Some(message)) = consumer.next().await {
+        let message: Delivery = message?;
+
+        let json_data: Value = serde_json::from_slice(&message.data).unwrap();
+
+        //NOTE: Since I can't test any of this, I'll just assume that the data from the spec is still valid...
+        if json_data["event_name"] != "Neuer Bürger" && json_data["event_id"] != 1001 {
+            println!("Recieved an invalid event");
+            continue;
+        }
+
+        //TODO Create pending citizen reg request
+        message
+            .ack(BasicAckOptions::default())
+            .await?
+    }
+    Ok(())
+}
+
+pub async fn rmg_listen(pool: deadpool_lapin::Pool) -> Result<(), lapin::Error> {
+    let mut retry = tokio::time::interval(time::Duration::from_secs(5));
+    loop {
+        retry.tick().await;
+        match rmg_handle_messages(pool.clone(), "smartauth", "new_citizen_consumer").await {
+            Ok(_) => println!("Got message success"),
+            Err(e) => println!("rmq: uh oh")
+        };
+    }
+}
+
+pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result<(), ServerCreationError>{
+    let db_pool = connect_to_db(&config)
+        .map_err(|err| ServerCreationError::DBError(err))?;
+
+    let rmq_pool = connect_to_rmq(&config)
+        .map_err(|err| ServerCreationError::RMQError(err))?;
 
     let app = move || {
         let redirect = Redirect::new()
@@ -149,14 +255,17 @@ pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result
                 };
                 CONFIG.cors.origins.contains(origin)
             }))
+
             .wrap(ErrorHandlers::new().handler(StatusCode::INTERNAL_SERVER_ERROR, error_handler::internal_server_error)
                 .handler(StatusCode::NOT_FOUND, error_handler::not_found))
 
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(db_pool.clone()))
-
     };
-    start_with_app(frontend, up_msg_handler, app, set_server_api_routes).await
+
+    join!(async {start_with_app(frontend, up_msg_handler, app, set_server_api_routes).await.unwrap()}, rmg_listen(rmq_pool.clone())).await;
+
+    Ok(())
 }
 
 async fn ping(config: web::Data<ServerConfig>) -> impl Responder {

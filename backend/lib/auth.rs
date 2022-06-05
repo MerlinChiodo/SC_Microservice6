@@ -1,7 +1,5 @@
-use std::char::ParseCharError;
 use moon::actix_web::http::Uri;
-use moon::actix_web::{Either, HttpResponse, web};
-use secrecy::Secret;
+use moon::actix_web::{Either, HttpResponse};
 use serde::Deserialize;
 use crate::error::{AuthError, AuthErrorType};
 
