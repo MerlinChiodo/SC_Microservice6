@@ -1,0 +1,5 @@
+CREATE TABLE PendingUsers (
+    id SERIAL PRIMARY KEY,
+    citizen BIGINT NOT NULL UNIQUE,
+    code VARCHAR(255) NOT NULL UNIQUE
+);
