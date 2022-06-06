@@ -11,6 +11,7 @@ use crate::request::RegistrationRequest;
 #[derive(Debug)]
 pub enum RegistrationRequestError {
     ServerError,
+    InvalidCitizenToken,
     InsertionError(RegistrationRequest),
     DuplicateUserError(RegistrationRequest)
 }

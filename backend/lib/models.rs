@@ -45,8 +45,8 @@ pub struct UserLoginRequest {
     pub username: String,
     pub password: String,
 
-    pub redirect_success: String,
-    pub redirect_error: String,
+    pub redirect_success: Option<String>,
+    pub redirect_error: Option<String>,
 }
 
 impl Display for UserLoginRequest{
@@ -57,18 +57,29 @@ impl Display for UserLoginRequest{
 
 impl UserLoginRequest {
     pub fn get_success_response(&self, token: String) -> HttpResponse {
-        HttpResponse::Ok()
-            .status(StatusCode::FOUND)
-            .append_header((LOCATION, HeaderValue::try_from(format!("{}/{}", &self.redirect_success, token)).unwrap()))
-            .finish()
+        if let Some(redirect) = &self.redirect_success {
+            HttpResponse::Ok()
+                .status(StatusCode::FOUND)
+                .append_header((LOCATION, HeaderValue::try_from(format!("{}/{}", redirect, token)).unwrap()))
+                .cookie(actix_web::cookie::Cookie::new("user-session", token.as_str()))
+                .finish()
+        } else {
+            HttpResponse::Ok()
+                .cookie(actix_web::cookie::Cookie::new("user-session", token.as_str()))
+                .finish()
+        }
     }
 
     //TODO: Add error info
     pub fn get_error_response(&self) -> HttpResponse {
-        HttpResponse::Ok()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .append_header((LOCATION, HeaderValue::try_from(&self.redirect_success).unwrap()))
-            .finish()
+        if let Some(redirect) = &self.redirect_error {
+            HttpResponse::Ok()
+                .status(StatusCode::FOUND)
+                .append_header((LOCATION, HeaderValue::try_from(redirect).unwrap()))
+                .finish()
+        } else {
+            HttpResponse::Forbidden().finish()
+        }
     }
 }
 

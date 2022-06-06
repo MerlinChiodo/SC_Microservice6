@@ -1,11 +1,13 @@
+use std::path::PathBuf;
 use actix_web::{HttpResponse, Responder, web};
 use actix_web::cookie::Cookie;
 use actix_web::error::BlockingError;
 use actix_web::error::Kind::Http;
-use crate::actions::{check_token, get_session, get_user, insert_new_session, insert_new_user, SessionRetrieveError, UserAuthError, UserRegistrationError};
+use crate::actions::{check_pending_user_token, check_token, get_session, get_user, insert_new_session, insert_new_user, SessionRetrieveError, UserAuthError, UserRegistrationError};
 use crate::models::{Token, UserLoginRequest};
 use crate::server::DBPool;
 use actix_web::post;
+use moon::actix_files::NamedFile;
 use crate::error::RegistrationRequestError;
 use crate::request::{RegistrationRequest, Request};
 use crate::schema::Users::username;
@@ -16,13 +18,20 @@ pub async fn register(pool: web::Data<DBPool>,
     let db = pool.get()
         .map_err(|_|RegistrationRequestError::ServerError)?;
     let request = request.into_inner();
+    let code = request.code.clone();
+
+    let pending_user = web::block(move || check_pending_user_token(&db, &code))
+        .await
+        .map_err(|_| RegistrationRequestError::ServerError)?
+        .map_err(|_| RegistrationRequestError::InvalidCitizenToken)?;
+
 
     let user_identity = UserInfo {
         username: request.info.username.clone(),
         password: request.info.password.clone()
     };
 
-    let result = web::block(move || insert_new_user(&db, user_identity))
+    let result = web::block(move || insert_new_user(&pool.get().unwrap(), user_identity, pending_user.citizen as u64))
         .await
         .map_err(|_| RegistrationRequestError::ServerError)?;
 
@@ -98,4 +107,8 @@ pub async fn validate_token_simple(pool: web::Data<DBPool>, token: web::Form<Tok
 
     let user = user?;
     Ok(HttpResponse::Ok().json((user.id, user.username)))
+}
+
+pub async fn login_page() -> actix_web::Result<NamedFile> {
+    Ok(NamedFile::open(PathBuf::from(r"static_content/login_example.html")).unwrap())
 }

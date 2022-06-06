@@ -61,22 +61,23 @@ pub struct UsernameInput {
 fn username_input() -> impl Element {
     RawHtmlEl::new("input")
         .attr("type", "text")
-        .attr("name", "name")
+        .attr("name", "username")
 }
 fn mail_input() -> impl Element {
     RawHtmlEl::new("input")
         .attr("type", "text")
-        //.attr("name", "login")
+        .attr("name", "mail")
 
 }
 fn cit_id_input() -> impl Element {
     RawHtmlEl::new("input")
         .attr("placeholder", "Registrierungsschlüssel")
+        .attr("name", "code")
 }
 
 fn pw_input() -> impl Element {
     RawHtmlEl::new("input")
-        .attr("placeholder", "password")
+        .attr("placeholder", "Passwort")
         .attr("name", "password")
 }
 

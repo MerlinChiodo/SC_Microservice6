@@ -32,12 +32,13 @@ use lapin::message::Delivery;
 use lapin::options::{BasicAckOptions, BasicConsumeOptions};
 use lapin::types::FieldTable;
 use moon::futures::StreamExt;
-use serde_json::Value;
-use crate::endpoints::{login, login_simple, register, validate_token_simple};
+use serde_json::{Number, Value};
+use crate::endpoints::{login, login_page, login_simple, register, validate_token_simple};
 
 pub type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
 pub type RMQPool = deadpool::managed::Object<deadpool_lapin::Manager>;
-
+use std::str;
+use crate::actions::{check_token, insert_new_pending_user};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServerConfig {
@@ -55,6 +56,7 @@ impl Default for ServerConfig {
         }
     }
 }
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DatabaseInfo {
     host: String,
@@ -111,8 +113,26 @@ impl fmt::Display for AuthServerInfo {
 }
 
 #[get("/onLogin/{token}")]
-pub async fn on_login_test(token: web::Path<String>) -> impl Responder {
-    token.into_inner()
+pub async fn on_login_test(pool: web::Data<DBPool>, token: web::Path<String>) -> impl Responder {
+    let user_token = token.into_inner();
+    let db = pool.get().expect("Unable to get db connection");
+
+    let user = web::block(move || check_token(&db, &user_token))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let user_info = reqwest::get(format!("http://vps2290194.fastwebserver.de:9710/api/citizen/1"))
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    println!("{}", user_info);
+    let json_data: Value = serde_json::from_str(&user_info).unwrap();
+
+    format!("Hey {} {}, nice to meet you!", json_data.get("firstname").unwrap(), json_data.get("lastname").unwrap())
 }
 
 pub fn set_server_api_routes(cfg: &mut web::ServiceConfig) {
@@ -121,6 +141,7 @@ pub fn set_server_api_routes(cfg: &mut web::ServiceConfig) {
         .route("/login", web::post().to(login))
         .route("/verify", web::post().to(validate_token_simple))
         .route("/test", web::get().to(|| async {"Hey"}))
+        .route("/page/login", web::get().to(login_page))
         .service(on_login_test);
 }
 
@@ -163,6 +184,7 @@ pub fn connect_to_db(config: &ServerConfig) -> Result<DBPool, DBConnectionError>
             db.to_string()
         }
     };
+
     let db_manager = ConnectionManager::<MysqlConnection>::new(db_url);
 
      diesel::r2d2::Pool::builder().build(db_manager)
@@ -190,9 +212,12 @@ pub fn connect_to_rmq(config: &ServerConfig) -> Result<deadpool_lapin::Pool, RMQ
         .map_err(|err| RMQConnectionError::ConnectionError(err))
 }
 
-pub async fn rmg_handle_messages(pool: deadpool_lapin::Pool, queue_name: &str, consumer_name: &str) -> Result<(), lapin::Error> {
+pub async fn rmg_handle_messages(db_pool: DBPool, pool: deadpool_lapin::Pool, queue_name: &str, consumer_name: &str) -> Result<(), lapin::Error> {
+    println!("RMQ: Listen...");
+
     //TODO: Add proper error handling
     let connection = pool.get().await.unwrap();
+
     let channel = connection.create_channel().await?;
     let mut consumer = channel.basic_consume(queue_name,
                                              consumer_name,
@@ -201,16 +226,21 @@ pub async fn rmg_handle_messages(pool: deadpool_lapin::Pool, queue_name: &str, c
         .await?;
 
     while let(Some(message)) = consumer.next().await {
+        println!("Got something!");
         let message: Delivery = message?;
 
-        let json_data: Value = serde_json::from_slice(&message.data).unwrap();
+        println!("{:?}", str::from_utf8(&message.data).unwrap_or("Unable to get as string"));
 
-        //NOTE: Since I can't test any of this, I'll just assume that the data from the spec is still valid...
-        if json_data["event_name"] != "Neuer Bürger" && json_data["event_id"] != 1001 {
-            println!("Recieved an invalid event");
-            continue;
+        let json_data: serde_json::Result<Value> = serde_json::from_slice(&message.data);
+
+        if let Ok(json) = json_data {
+            println!("{}",&json);
+            if json["event_id"] == 1001 {
+                println!("We got a new citizen");
+                let id = json.get("citizen_id").unwrap();
+                insert_new_pending_user(&db_pool.get().unwrap(),id.as_u64().unwrap()).unwrap();
+            }
         }
-
         //TODO Create pending citizen reg request
         message
             .ack(BasicAckOptions::default())
@@ -219,11 +249,11 @@ pub async fn rmg_handle_messages(pool: deadpool_lapin::Pool, queue_name: &str, c
     Ok(())
 }
 
-pub async fn rmg_listen(pool: deadpool_lapin::Pool) -> Result<(), lapin::Error> {
+pub async fn rmg_listen(db_pool: DBPool, pool: deadpool_lapin::Pool) -> Result<(), lapin::Error> {
     let mut retry = tokio::time::interval(time::Duration::from_secs(5));
     loop {
         retry.tick().await;
-        match rmg_handle_messages(pool.clone(), "smartauth", "new_citizen_consumer").await {
+        match rmg_handle_messages(db_pool.clone(), pool.clone(), "smartauth", "new_citizen_consumer").await {
             Ok(_) => println!("Got message success"),
             Err(e) => println!("rmq: uh oh")
         };
@@ -237,6 +267,7 @@ pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result
     let rmq_pool = connect_to_rmq(&config)
         .map_err(|err| ServerCreationError::RMQError(err))?;
 
+    let rmq_thread = rmg_listen(db_pool.clone(), rmq_pool.clone());
     let app = move || {
         let redirect = Redirect::new()
             .http_to_https(CONFIG.https)
@@ -263,8 +294,9 @@ pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result
             .app_data(web::Data::new(db_pool.clone()))
     };
 
-    join!(async {start_with_app(frontend, up_msg_handler, app, set_server_api_routes).await.unwrap()}, rmg_listen(rmq_pool.clone())).await;
+    join!(async {start_with_app(frontend, up_msg_handler, app, set_server_api_routes).await.unwrap()}, rmq_thread).await;
 
+    rmq_pool.close();
     Ok(())
 }
 

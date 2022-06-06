@@ -14,8 +14,11 @@ use crate::schema::Users::{id, username};
 use crate::diesel::BelongingToDsl;
 use crate::schema::Sessions::{expires, token, user_id};
 use diesel::dsl::*;
+use diesel::mysql::MysqlQueryBuilder;
+use crate::schema::PendingUsers::*;
+use crate::schema::PendingUsers::dsl::PendingUsers;
 use crate::session::{NewSession, SessionCreationError, SessionHolder};
-use crate::user::{NewUser, User, UserInfo};
+use crate::user::{NewPendingUser, NewUser, PendingUser, User, UserInfo};
 
 #[derive(Debug)]
 pub enum UserRegistrationError {
@@ -97,8 +100,8 @@ impl ResponseError for SessionRetrieveError {
     fn error_response(&self) -> HttpResponse {HttpResponse::build(self.status_code()).finish()}
 }
 
-pub fn insert_new_user(db: &MysqlConnection, user: UserInfo) -> Result<(), UserRegistrationError> {
-    let new_user = NewUser::new(&user)
+pub fn insert_new_user(db: &MysqlConnection, user: UserInfo, uid: u64) -> Result<(), UserRegistrationError> {
+    let new_user = NewUser::new(uid, &user)
         .map_err(|err| UserRegistrationError::HashError(err))?;
 
 
@@ -155,4 +158,19 @@ pub fn check_token(db: &MysqlConnection, _token: &String) -> Result<User, Sessio
     Users.filter(id.eq(session.user_id))
         .first(db)
         .map_err(|err| {SessionRetrieveError::DbError(err)})
+}
+
+pub fn insert_new_pending_user(db: &MysqlConnection, citizen_id: u64) -> Result<NewPendingUser, diesel::result::Error> {
+    let user = NewPendingUser::new(citizen_id);
+    diesel::insert_into(PendingUsers)
+        .values(&user)
+        .execute(db)?;
+    Ok(user)
+}
+
+pub fn check_pending_user_token(db: &MysqlConnection, _token: &str) -> Result<PendingUser, diesel::result::Error> {
+    let pending_user: PendingUser = PendingUsers.filter(code.eq(_token))
+        .first(db)?;
+
+    Ok(pending_user)
 }

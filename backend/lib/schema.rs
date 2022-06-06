@@ -1,4 +1,12 @@
 table! {
+    PendingUsers (id) {
+        id -> Unsigned<Bigint>,
+        citizen -> Bigint,
+        code -> Varchar,
+    }
+}
+
+table! {
     Sessions (id) {
         id -> Unsigned<Bigint>,
         user_id -> Unsigned<Bigint>,
@@ -18,6 +26,7 @@ table! {
 joinable!(Sessions -> Users (user_id));
 
 allow_tables_to_appear_in_same_query!(
+    PendingUsers,
     Sessions,
     Users,
 );

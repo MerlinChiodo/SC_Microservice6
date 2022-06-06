@@ -1,11 +1,14 @@
 use actix_web::http::header::LOCATION;
 use actix_web::http::{HeaderValue, StatusCode};
 use actix_web::{HttpResponse, Resource};
-use rand::RngCore;
+use rand::{Rng, RngCore};
 use serde::Deserialize;
 use crate::session::{SessionCreationError, SessionHolder};
 use diesel::dsl::*;
+use diesel::MysqlConnection;
 use crate::schema::Users;
+use crate::schema::PendingUsers;
+use crate::server::DBPool;
 
 pub trait ResourceOwnerCredentials {
     fn get_key(&self) -> &str;
@@ -74,11 +77,12 @@ impl UserInfo {
 #[derive(Insertable)]
 #[table_name="Users"]
 pub struct NewUser {
+    pub id: u64,
     pub username: String,
     pub hash: String,
 }
 impl NewUser {
-    pub fn new(info: &impl ResourceOwnerCredentials) -> Result<Self, argon2::Error> {
+    pub fn new(id: u64, info: &impl ResourceOwnerCredentials) -> Result<Self, argon2::Error> {
         let mut rng = rand::thread_rng();
         let mut salt = vec![0; 128];
 
@@ -90,28 +94,47 @@ impl NewUser {
         let hash = argon2::hash_encoded(info.get_secret().as_bytes(), &salt, &config)?;
 
         Ok(Self {
+            id,
             username: String::from(info.get_key()),
             hash,
         })
     }
 }
 
-/*
 #[derive(Queryable, Identifiable, PartialEq)]
+#[table_name="PendingUsers"]
 pub struct PendingUser {
     id: u64,
-    citizen: u64,
+    pub citizen: i64,
     code: String
 }
 
 #[derive(Insertable)]
 #[table_name="PendingUsers"]
 pub struct NewPendingUser {
-    citizen: u64,
+    citizen: i64,
     code: String
 }
 
 impl NewPendingUser {
-}
+    pub fn new(citizen_id: u64) -> Self {
+        let mut rng = rand::thread_rng();
 
- */
+        let mut code = rand::thread_rng();
+        const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                            abcdefghijklmnopqrstuvwxyz\
+                            0123456789)(*&^%$#@!~";
+        //Read max len of code from somewhere maybe
+        let code = (0..10)
+            .map(|_| {
+                let idx = rng.gen_range(0..CHARSET.len());
+                CHARSET[idx] as char
+            })
+            .collect();
+
+        Self {
+            citizen: citizen_id as i64,
+            code
+        }
+    }
+}
