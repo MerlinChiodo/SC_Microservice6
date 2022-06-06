@@ -6,6 +6,7 @@ FROM rust:latest
 #ARG AMQP_ADDR
 #ENV AMQP_ADDR=${AMQP_ADDR}
 
+
 WORKDIR /usr/src/app
 RUN rustup default nightly
 RUN apt-get install default-libmysqlclient-dev
