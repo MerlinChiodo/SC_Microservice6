@@ -1,5 +1,5 @@
 FROM rust:latest
-
+#Test
 ARG DATABASE_URL
 ENV DATABASE_URL=${DATABASE_URL}
 
