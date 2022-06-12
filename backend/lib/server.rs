@@ -33,7 +33,7 @@ use lapin::options::{BasicAckOptions, BasicConsumeOptions};
 use lapin::types::FieldTable;
 use moon::futures::StreamExt;
 use serde_json::{Number, Value};
-use crate::endpoints::{login, login_page, login_simple, register, validate_token_simple};
+use crate::endpoints::{login, login_external, login_page, login_simple, register, validate_token_simple};
 
 pub type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
 pub type RMQPool = deadpool::managed::Object<deadpool_lapin::Manager>;
@@ -141,15 +141,24 @@ pub struct MailServer {
 
 #[get("/onLogin/{token}")]
 pub async fn on_login_test(pool: web::Data<DBPool>, token: web::Path<String>) -> impl Responder {
-    let user_token = token.into_inner();
-    let db = pool.get().expect("Unable to get db connection");
+    println!("Testing login");
 
-    let user = web::block(move || check_token(&db, &user_token))
+    let closure = {
+        let user_token = token.clone();
+        let db = pool.get().expect("Unable to get db connection");
+        println!("Checking token, token is: {}", user_token);
+        check_token(&db, &user_token)
+    };
+
+    let user = web::block(|| closure)
         .await
         .unwrap()
         .unwrap();
 
-    let user_info = reqwest::get(format!("http://vps2290194.fastwebserver.de:9710/api/citizen/1"))
+
+    println!("Trying to get information about user {} with id {}", user.username, user.id);
+    let user_token = token.into_inner();
+    let user_info = reqwest::get(format!("http://www.smartcityproject.net:9710/api/citizen/{}", user.id))
         .await
         .unwrap()
         .text()
@@ -169,6 +178,7 @@ pub fn set_server_api_routes(cfg: &mut web::ServiceConfig) {
         .route("/verify", web::post().to(validate_token_simple))
         .route("/test", web::get().to(|| async {"Hey"}))
         .route("/page/login", web::get().to(login_page))
+        .route("/external", web::get().to(login_external))
         .service(on_login_test);
 }
 

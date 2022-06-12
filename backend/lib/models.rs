@@ -41,6 +41,12 @@ pub struct Token {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct ExternalUserLoginRequest {
+    pub redirect_success: Option<String>,
+    pub redirect_error: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
 pub struct UserLoginRequest {
     pub username: String,
     pub password: String,
@@ -57,15 +63,18 @@ impl Display for UserLoginRequest{
 
 impl UserLoginRequest {
     pub fn get_success_response(&self, token: String) -> HttpResponse {
+        let cookie = actix_web::cookie::Cookie::build("user_session_token", token.clone())
+            .domain("smartcityproject.net")
+            .finish();
+
         if let Some(redirect) = &self.redirect_success {
-            HttpResponse::Ok()
-                .status(StatusCode::FOUND)
+            HttpResponse::Found()
                 .append_header((LOCATION, HeaderValue::try_from(format!("{}/{}", redirect, token)).unwrap()))
-                .cookie(actix_web::cookie::Cookie::new("user-session", token.as_str()))
+                .cookie(cookie)
                 .finish()
         } else {
-            HttpResponse::Ok()
-                .cookie(actix_web::cookie::Cookie::new("user-session", token.as_str()))
+            HttpResponse::Found()
+                .cookie(cookie)
                 .finish()
         }
     }
@@ -73,8 +82,7 @@ impl UserLoginRequest {
     //TODO: Add error info
     pub fn get_error_response(&self) -> HttpResponse {
         if let Some(redirect) = &self.redirect_error {
-            HttpResponse::Ok()
-                .status(StatusCode::FOUND)
+            HttpResponse::Found()
                 .append_header((LOCATION, HeaderValue::try_from(redirect).unwrap()))
                 .finish()
         } else {

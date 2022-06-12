@@ -47,7 +47,7 @@ impl NewSession {
         //TODO: This doesn't adhere to oauth2 std
         const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
                             abcdefghijklmnopqrstuvwxyz\
-                            0123456789)(*&^%$#@!~";
+                            0123456789";
         let token = (0..64)
             .map(|_| {
                 let idx = rng.gen_range(0..CHARSET.len());

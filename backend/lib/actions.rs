@@ -155,8 +155,10 @@ pub fn check_token(db: &MysqlConnection, _token: &String) -> Result<User, Sessio
     let session: Session = Sessions.filter(token.eq(_token))
         .first(db)
         .map_err(|err| {SessionRetrieveError::DbError(err)})?;
+    println!("Executed query");
 
     if !session.is_valid(){return Err(SessionRetrieveError::SessionExpired)};
+    println!("Session is valid");
 
     Users.filter(id.eq(session.user_id))
         .first(db)

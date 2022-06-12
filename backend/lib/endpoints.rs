@@ -4,7 +4,7 @@ use actix_web::cookie::Cookie;
 use actix_web::error::BlockingError;
 use actix_web::error::Kind::Http;
 use crate::actions::{check_pending_user_token, check_token, get_session, get_user, insert_new_session, insert_new_user, SessionRetrieveError, UserAuthError, UserRegistrationError};
-use crate::models::{Token, UserLoginRequest};
+use crate::models::{ExternalUserLoginRequest, Token, UserLoginRequest};
 use crate::server::DBPool;
 use actix_web::post;
 use moon::actix_files::NamedFile;
@@ -12,7 +12,7 @@ use crate::error::RegistrationRequestError;
 use crate::request::{RegistrationRequest, Request};
 use crate::schema::Users::username;
 use crate::user::{UserInfo};
-
+use actix_web::get;
 pub async fn register(pool: web::Data<DBPool>,
                       request: web::Form<RegistrationRequest>) -> Result<HttpResponse, RegistrationRequestError> {
     let db = pool.get()
@@ -42,6 +42,11 @@ pub async fn register(pool: web::Data<DBPool>,
     }
 }
 
+pub async fn login_external(request: web::Query<ExternalUserLoginRequest>) -> impl Responder {
+    println!("Hey!");
+    NamedFile::open(PathBuf::from(r"static_content/login_example.html")).unwrap()
+
+}
 pub async fn login(pool: web::Data<DBPool>, request: web::Form<UserLoginRequest>) -> Result<HttpResponse, UserAuthError> {
 
     let request = request.into_inner();
@@ -66,10 +71,12 @@ pub async fn login(pool: web::Data<DBPool>, request: web::Form<UserLoginRequest>
     let token = web::block(move || insert_new_session(&db2,&user.unwrap()))
         .await
         .map_err(|e| UserAuthError::ServerError)?;
+    println!("Inserted session");
 
     if let Err(e) = token{
         return Ok(request.get_error_response())
     };
+    println!("OK: Redirecting the user");
 
     Ok(request.get_success_response(token.unwrap()))
 }
@@ -113,6 +120,7 @@ pub async fn validate_token_simple(pool: web::Data<DBPool>, token: web::Form<Tok
     let user = user?;
     Ok(HttpResponse::Ok().json((user.id, user.username)))
 }
+
 
 pub async fn login_page() -> actix_web::Result<NamedFile> {
     Ok(NamedFile::open(PathBuf::from(r"static_content/login_example.html")).unwrap())
