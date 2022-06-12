@@ -38,7 +38,11 @@ use crate::endpoints::{login, login_page, login_simple, register, validate_token
 pub type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
 pub type RMQPool = deadpool::managed::Object<deadpool_lapin::Manager>;
 use std::str;
+use deadpool::managed::{Object, PoolError};
+use deadpool_lapin::{Manager, Pool};
+use diesel::r2d2;
 use crate::actions::{check_token, insert_new_pending_user};
+use crate::server::RmqError::LapinError;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServerConfig {
@@ -212,24 +216,37 @@ pub fn connect_to_rmq(config: &ServerConfig) -> Result<deadpool_lapin::Pool, RMQ
         .map_err(|err| RMQConnectionError::ConnectionError(err))
 }
 
-pub async fn rmg_handle_messages(db_pool: DBPool, pool: deadpool_lapin::Pool, queue_name: &str, consumer_name: &str) -> Result<(), lapin::Error> {
+pub enum RmqError {
+    PoolError,
+    LapinError(lapin::Error),
+    MessageParseError,
+    DBError(diesel::result::Error),
+    DBPoolError
+}
+
+pub async fn rmg_handle_messages(db_pool: DBPool, pool: deadpool_lapin::Pool, queue_name: &str, consumer_name: &str) -> Result<(), RmqError> {
     println!("RMQ: Listen...");
 
     //TODO: Add proper error handling
-    let connection = pool.get().await.unwrap();
+    let connection = pool.get()
+        .await
+        .map_err(|_| RmqError::PoolError)?;
 
-    let channel = connection.create_channel().await?;
+    let channel = connection.create_channel().await.map_err(|e| RmqError::LapinError((e)))?;
     let mut consumer = channel.basic_consume(queue_name,
                                              consumer_name,
                                              BasicConsumeOptions::default(),
                                              FieldTable::default())
-        .await?;
+        .await
+        .map_err(|e| RmqError::LapinError(e))?;
 
     while let(Some(message)) = consumer.next().await {
         println!("Got something!");
-        let message: Delivery = message?;
+        let message: Delivery = message
+            .map_err(|_| RmqError::MessageParseError)?;
 
-        println!("{:?}", str::from_utf8(&message.data).unwrap_or("Unable to get as string"));
+        println!("{:?}", str::from_utf8(&message.data)
+            .map_err(|_| RmqError::MessageParseError)?);
 
         let json_data: serde_json::Result<Value> = serde_json::from_slice(&message.data);
 
@@ -237,15 +254,20 @@ pub async fn rmg_handle_messages(db_pool: DBPool, pool: deadpool_lapin::Pool, qu
             println!("{}",&json);
             if json["event_id"] == 1001 {
                 println!("We got a new citizen");
-                let id = json.get("citizen_id").unwrap();
-                insert_new_pending_user(&db_pool.get().unwrap(),id.as_u64().unwrap()).unwrap();
+                let id = json.get("citizen_id").ok_or(RmqError::MessageParseError)?;
+                let db = &db_pool
+                    .get()
+                    .map_err(|_| RmqError::DBPoolError)?;
+                insert_new_pending_user(&db,id.as_u64().unwrap())
+                    .map_err(|e| RmqError::DBError(e))?;
             }
         }
         //TODO Create pending citizen reg request
         message
             .ack(BasicAckOptions::default())
-            .await?
-    }
+            .await
+            .map_err(|e| RmqError::LapinError(e))?;
+    };
     Ok(())
 }
 
