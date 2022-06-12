@@ -91,9 +91,13 @@ pub async fn login_simple(pool: web::Data<DBPool>, user: web::Form<UserInfo>) ->
         .await
         .map_err(|e|UserAuthError::ServerError)?
         .map_err(|e| UserAuthError::ServerError)?;
+    let cookie = Cookie::build("user_session_token", token)
+        .domain("smartcityproject.com")
+        .secure(true)
+        .finish();
 
     Ok(HttpResponse::Ok()
-        .cookie(Cookie::new("user_session_token", token))
+        .cookie(cookie)
         .finish())
 }
 
