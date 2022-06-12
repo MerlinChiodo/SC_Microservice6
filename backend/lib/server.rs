@@ -288,7 +288,6 @@ pub async fn rmg_handle_messages(mail: &MailServer, db_pool: DBPool, pool: deadp
     let connection = pool.get()
         .await
         .map_err(|_| RmqError::PoolError)?;
-
     let channel = connection.create_channel().await.map_err(|e| RmqError::LapinError((e)))?;
     let mut consumer = channel.basic_consume(queue_name,
                                              consumer_name,
@@ -301,6 +300,11 @@ pub async fn rmg_handle_messages(mail: &MailServer, db_pool: DBPool, pool: deadp
         println!("Got something!");
         let message: Delivery = message
             .map_err(|_| RmqError::MessageParseError)?;
+
+        message
+            .ack(BasicAckOptions::default())
+            .await
+            .map_err(|e| RmqError::LapinError(e))?;
 
         println!("{:?}", str::from_utf8(&message.data)
             .map_err(|_| RmqError::MessageParseError)?);
@@ -321,10 +325,6 @@ pub async fn rmg_handle_messages(mail: &MailServer, db_pool: DBPool, pool: deadp
             }
         }
         //TODO Create pending citizen reg request
-        message
-            .ack(BasicAckOptions::default())
-            .await
-            .map_err(|e| RmqError::LapinError(e))?;
     };
     Ok(())
 }

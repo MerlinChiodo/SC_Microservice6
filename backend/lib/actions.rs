@@ -181,18 +181,27 @@ pub async fn send_citizen_code(mail_client: &SmtpClient, user: &NewPendingUser) 
 
     let json_data: Value = serde_json::from_str(&citizen_info).unwrap();
 
-    let mail_adress = json_data.get("email").unwrap();
-    let name = format!("{} {}", json_data.get("firstname").unwrap(), json_data.get("lastname").unwrap());
+    let mail_adress = json_data.get("email")
+        .unwrap()
+        .as_str()
+        .unwrap();
+
+    let first_name = json_data.get("firstname").unwrap().as_str().unwrap();
+    let last_name = json_data.get("lastname").unwrap().as_str().unwrap();
+    let name = format!("{} {}", first_name, last_name);
+    println!("Sending mail to: {}\n with name {}", mail_adress, name);
 
     let email = EmailBuilder::new()
-        .to(mail_adress.as_str().unwrap())
-        .from("support@smartcityproject.net")
+        .to(mail_adress)
+        .from("support@mail.smartcityproject.net")
         .subject("SmartCity: Ihr Registrierungscode")
         .text(format!("Hallo {}! Ihr persönlicher Registrierungscode lautet: {}", name, user.code))
         .build()
         .unwrap();
     let mut mailer = mail_client.clone().transport();
-    mailer.send(email.into()).unwrap();
+    let result = mailer.send(email.into());
+    println!("Result: {:?}", result);
+
 }
 
 pub fn check_pending_user_token(db: &MysqlConnection, _token: &str) -> Result<PendingUser, diesel::result::Error> {
