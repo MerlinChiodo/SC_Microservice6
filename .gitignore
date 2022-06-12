@@ -3,3 +3,6 @@ cargo_install_root
 mzoon
 mzoon.exe
 frontend/wasm-pack*
+cargo.lock
+backend/cargo.lock
+frontend/cargo.lock
