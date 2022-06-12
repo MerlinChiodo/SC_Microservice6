@@ -41,14 +41,17 @@ use std::str;
 use deadpool::managed::{Object, PoolError};
 use deadpool_lapin::{Manager, Pool};
 use diesel::r2d2;
-use crate::actions::{check_token, insert_new_pending_user};
+use lettre::{smtp, SmtpClient, SmtpTransport};
+use lettre::smtp::authentication::Credentials;
+use crate::actions::{check_token, insert_new_pending_user, send_citizen_code};
 use crate::server::RmqError::LapinError;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServerConfig {
     info: AuthServerInfo,
     db: Option<DatabaseInfo>,
-    rmq: Option<RabbitMQServerInfo>
+    rmq: Option<RabbitMQServerInfo>,
+    mail: Option<MailServerInfo>
 }
 
 impl Default for ServerConfig {
@@ -57,6 +60,7 @@ impl Default for ServerConfig {
             info: AuthServerInfo::default(),
             db: None,
             rmq: None,
+            mail: None
         }
     }
 }
@@ -116,6 +120,25 @@ impl fmt::Display for AuthServerInfo {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MailServerInfo {
+    username: String,
+    host: String,
+    password: String
+}
+
+impl MailServerInfo {
+    pub fn to_credentials(&self) -> smtp::authentication::Credentials {
+        Credentials::new(self.username.clone(), self.password.clone())
+    }
+}
+
+#[derive(Clone)]
+pub struct MailServer {
+    pub info: MailServerInfo,
+    pub transport: SmtpClient
+}
+
 #[get("/onLogin/{token}")]
 pub async fn on_login_test(pool: web::Data<DBPool>, token: web::Path<String>) -> impl Responder {
     let user_token = token.into_inner();
@@ -163,7 +186,8 @@ async fn frontend() -> Frontend {
 #[derive(Debug)]
 pub enum ServerCreationError {
     DBError(DBConnectionError),
-    RMQError(RMQConnectionError)
+    RMQError(RMQConnectionError),
+    MailError(MailError)
 }
 
 #[derive(Debug)]
@@ -177,6 +201,13 @@ pub enum RMQConnectionError {
     MissingSettings,
     ConnectionError(deadpool_lapin::BuildError)
 }
+
+#[derive(Debug)]
+pub enum MailError {
+    MissingSettings,
+    InvalidHost(lettre::smtp::error::Error)
+}
+
 
 pub fn connect_to_db(config: &ServerConfig) -> Result<DBPool, DBConnectionError> {
     let db_url = match &config.db {
@@ -216,6 +247,32 @@ pub fn connect_to_rmq(config: &ServerConfig) -> Result<deadpool_lapin::Pool, RMQ
         .map_err(|err| RMQConnectionError::ConnectionError(err))
 }
 
+pub fn create_mail_sender(config: &ServerConfig) -> Result<MailServer, MailError> {
+    let (host, username, password) = match &config.mail {
+        None => {
+            ((std::env::var("MAIL_HOST").map_err(|_| MailError::MissingSettings)?,
+              std::env::var("MAIL_USERNAME").map_err(|_| MailError::MissingSettings)?,
+              std::env::var("MAIL_PASSWORD").map_err(|_| MailError::MissingSettings)?))
+        }
+        Some(mail) => {
+            (mail.host.clone(), mail.username.clone(), mail.password.clone())
+        }
+    };
+
+    Ok(MailServer {
+        transport: SmtpClient::new_simple(&host.clone())
+            .map_err(|e|MailError::InvalidHost(e))?
+            .credentials(Credentials::new(username.clone(), password.clone())),
+
+        info: MailServerInfo {
+            username,
+            host,
+            password
+        },
+    })
+
+}
+
 pub enum RmqError {
     PoolError,
     LapinError(lapin::Error),
@@ -224,7 +281,7 @@ pub enum RmqError {
     DBPoolError
 }
 
-pub async fn rmg_handle_messages(db_pool: DBPool, pool: deadpool_lapin::Pool, queue_name: &str, consumer_name: &str) -> Result<(), RmqError> {
+pub async fn rmg_handle_messages(mail: &MailServer, db_pool: DBPool, pool: deadpool_lapin::Pool, queue_name: &str, consumer_name: &str) -> Result<(), RmqError> {
     println!("RMQ: Listen...");
 
     //TODO: Add proper error handling
@@ -258,8 +315,9 @@ pub async fn rmg_handle_messages(db_pool: DBPool, pool: deadpool_lapin::Pool, qu
                 let db = &db_pool
                     .get()
                     .map_err(|_| RmqError::DBPoolError)?;
-                insert_new_pending_user(&db,id.as_u64().unwrap())
+                let pending_user = insert_new_pending_user(&db,id.as_u64().unwrap())
                     .map_err(|e| RmqError::DBError(e))?;
+                send_citizen_code(&mail.transport, &pending_user).await;
             }
         }
         //TODO Create pending citizen reg request
@@ -271,11 +329,11 @@ pub async fn rmg_handle_messages(db_pool: DBPool, pool: deadpool_lapin::Pool, qu
     Ok(())
 }
 
-pub async fn rmg_listen(db_pool: DBPool, pool: deadpool_lapin::Pool) -> Result<(), lapin::Error> {
+pub async fn rmg_listen(mail: &MailServer, db_pool: DBPool, pool: deadpool_lapin::Pool) -> Result<(), lapin::Error> {
     let mut retry = tokio::time::interval(time::Duration::from_secs(5));
     loop {
         retry.tick().await;
-        match rmg_handle_messages(db_pool.clone(), pool.clone(), "smartauth", "new_citizen_consumer").await {
+        match rmg_handle_messages(mail, db_pool.clone(), pool.clone(), "smartauth", "new_citizen_consumer").await {
             Ok(_) => println!("Got message success"),
             Err(e) => println!("rmq: uh oh")
         };
@@ -289,7 +347,10 @@ pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result
     let rmq_pool = connect_to_rmq(&config)
         .map_err(|err| ServerCreationError::RMQError(err))?;
 
-    let rmq_thread = rmg_listen(db_pool.clone(), rmq_pool.clone());
+    let mail_server = create_mail_sender(&config)
+        .map_err(|err| ServerCreationError::MailError(err))?;
+
+    let rmq_thread = rmg_listen(&mail_server, db_pool.clone(), rmq_pool.clone());
     let app = move || {
         let redirect = Redirect::new()
             .http_to_https(CONFIG.https)

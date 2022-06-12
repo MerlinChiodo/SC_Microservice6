@@ -112,8 +112,8 @@ pub struct PendingUser {
 #[derive(Insertable)]
 #[table_name="PendingUsers"]
 pub struct NewPendingUser {
-    citizen: i64,
-    code: String
+    pub citizen: i64,
+    pub code: String
 }
 
 impl NewPendingUser {

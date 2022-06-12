@@ -1,5 +1,5 @@
 use std::fmt;
-use std::fmt::{Display, Formatter, write};
+use std::fmt::{Display, format, Formatter, write};
 use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, ResponseError};
 use actix_web::error::BlockingError;
@@ -15,6 +15,9 @@ use crate::diesel::BelongingToDsl;
 use crate::schema::Sessions::{expires, token, user_id};
 use diesel::dsl::*;
 use diesel::mysql::MysqlQueryBuilder;
+use lettre::{SmtpClient, Transport};
+use lettre_email::EmailBuilder;
+use serde_json::Value;
 use crate::schema::PendingUsers::*;
 use crate::schema::PendingUsers::dsl::PendingUsers;
 use crate::session::{NewSession, SessionCreationError, SessionHolder};
@@ -159,13 +162,37 @@ pub fn check_token(db: &MysqlConnection, _token: &String) -> Result<User, Sessio
         .first(db)
         .map_err(|err| {SessionRetrieveError::DbError(err)})
 }
-
 pub fn insert_new_pending_user(db: &MysqlConnection, citizen_id: u64) -> Result<NewPendingUser, diesel::result::Error> {
     let user = NewPendingUser::new(citizen_id);
     diesel::insert_into(PendingUsers)
         .values(&user)
         .execute(db)?;
     Ok(user)
+}
+
+pub async fn send_citizen_code(mail_client: &SmtpClient, user: &NewPendingUser) {
+    //TODO: Add proper error handling
+    let citizen_info = reqwest::get(format!("http://www.smartcityproject.net:9710/api/citizen/{}", user.citizen))
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    let json_data: Value = serde_json::from_str(&citizen_info).unwrap();
+
+    let mail_adress = json_data.get("email").unwrap();
+    let name = format!("{} {}", json_data.get("firstname").unwrap(), json_data.get("lastname").unwrap());
+
+    let email = EmailBuilder::new()
+        .to(mail_adress.as_str().unwrap())
+        .from("support@smartcityproject.net")
+        .subject("SmartCity: Ihr Registrierungscode")
+        .text(format!("Hallo {}! Ihr persönlicher Registrierungscode lautet: {}", name, user.code))
+        .build()
+        .unwrap();
+    let mut mailer = mail_client.clone().transport();
+    mailer.send(email.into()).unwrap();
 }
 
 pub fn check_pending_user_token(db: &MysqlConnection, _token: &str) -> Result<PendingUser, diesel::result::Error> {
