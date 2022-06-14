@@ -44,6 +44,7 @@ use diesel::r2d2;
 use lettre::{smtp, SmtpClient, SmtpTransport};
 use lettre::smtp::authentication::Credentials;
 use crate::actions::{check_token, insert_new_pending_user, send_citizen_code};
+use crate::models::Token;
 use crate::server::RmqError::LapinError;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -138,16 +139,20 @@ pub struct MailServer {
     pub info: MailServerInfo,
     pub transport: SmtpClient
 }
+#[derive(Deserialize)]
+pub struct TokenQuery {
+    token: String
+}
 
 #[get("/onLogin/{token}")]
-pub async fn on_login_test(pool: web::Data<DBPool>, token: web::Path<String>) -> impl Responder {
+pub async fn on_login_test(pool: web::Data<DBPool>, token: web::Query<TokenQuery>) -> impl Responder {
     println!("Testing login");
-
+    let user_token = token.into_inner().token;
     let closure = {
-        let user_token = token.clone();
+        let t = user_token.clone();
         let db = pool.get().expect("Unable to get db connection");
-        println!("Checking token, token is: {}", user_token);
-        check_token(&db, &user_token)
+        println!("Checking token, token is: {}", t);
+        check_token(&db, &t)
     };
 
     let user = web::block(|| closure)
@@ -157,7 +162,6 @@ pub async fn on_login_test(pool: web::Data<DBPool>, token: web::Path<String>) ->
 
 
     println!("Trying to get information about user {} with id {}", user.username, user.id);
-    let user_token = token.into_inner();
     let user_info = reqwest::get(format!("http://www.smartcityproject.net:9710/api/citizen/{}", user.id))
         .await
         .unwrap()

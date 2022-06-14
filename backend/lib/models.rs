@@ -69,7 +69,7 @@ impl UserLoginRequest {
 
         if let Some(redirect) = &self.redirect_success {
             HttpResponse::Found()
-                .append_header((LOCATION, HeaderValue::try_from(format!("{}/{}", redirect, token)).unwrap()))
+                .append_header((LOCATION, HeaderValue::try_from(format!("{}?token={}", redirect, token)).unwrap()))
                 .cookie(cookie)
                 .finish()
         } else {

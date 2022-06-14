@@ -13,6 +13,8 @@ use crate::request::{RegistrationRequest, Request};
 use crate::schema::Users::username;
 use crate::user::{UserInfo};
 use actix_web::get;
+use serde_json::Value;
+
 pub async fn register(pool: web::Data<DBPool>,
                       request: web::Form<RegistrationRequest>) -> Result<HttpResponse, RegistrationRequestError> {
     let db = pool.get()
@@ -116,9 +118,20 @@ pub async fn validate_token_simple(pool: web::Data<DBPool>, token: web::Form<Tok
     let user = web::block(move || check_token(&db, &token.code))
         .await
         .map_err(|_| SessionRetrieveError::ServerError)?;
-
+    if let Err(e) = &user {
+        return  Ok(HttpResponse::NotFound().finish());
+    }
     let user = user?;
-    Ok(HttpResponse::Ok().json((user.id, user.username)))
+    let citizen_info = reqwest::get(format!("http://www.smartcityproject.net:9710/api/citizen/{}", user.id))
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    let json_data: Value = serde_json::from_str(&citizen_info).unwrap();
+
+    Ok(HttpResponse::Ok().json(json_data))
 }
 
 
