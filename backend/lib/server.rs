@@ -144,7 +144,7 @@ pub struct TokenQuery {
     token: String
 }
 
-#[get("/onLogin/{token}")]
+#[get("/onLogin")]
 pub async fn on_login_test(pool: web::Data<DBPool>, token: web::Query<TokenQuery>) -> impl Responder {
     println!("Testing login");
     let user_token = token.into_inner().token;
