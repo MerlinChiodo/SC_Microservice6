@@ -3,7 +3,7 @@ use actix_web::{HttpResponse, Responder, web};
 use actix_web::cookie::Cookie;
 use actix_web::error::BlockingError;
 use actix_web::error::Kind::Http;
-use crate::actions::{check_pending_user_token, check_token, get_session, get_user, insert_new_session, insert_new_user, SessionRetrieveError, UserAuthError, UserRegistrationError};
+use crate::actions::{check_pending_user_token, check_token, get_session, get_token, get_user, insert_new_session, insert_new_user, SessionRetrieveError, UserAuthError, UserRegistrationError};
 use crate::models::{ExternalUserLoginRequest, Token, UserLoginRequest};
 use crate::server::DBPool;
 use actix_web::post;
@@ -11,10 +11,11 @@ use moon::actix_files::NamedFile;
 use crate::error::RegistrationRequestError;
 use crate::request::{RegistrationRequest, Request};
 use crate::schema::Users::username;
-use crate::user::{UserInfo};
+use crate::user::{CitizenInfo, UserInfo};
 use actix_web::get;
 use serde_json::Value;
-
+use serde::Deserialize;
+use serde::Serialize;
 pub async fn register(pool: web::Data<DBPool>,
                       request: web::Form<RegistrationRequest>) -> Result<HttpResponse, RegistrationRequestError> {
     let db = pool.get()
@@ -49,6 +50,14 @@ pub async fn login_external(request: web::Query<ExternalUserLoginRequest>) -> im
     NamedFile::open(PathBuf::from(r"static_content/login_example.html")).unwrap()
 
 }
+
+//NOTE: THIS IS HORRIBLE
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct LoginResponse {
+    username: String,
+    user_session_token: String,
+    info: CitizenInfo
+}
 pub async fn login(pool: web::Data<DBPool>, request: web::Form<UserLoginRequest>) -> Result<HttpResponse, UserAuthError> {
 
     let request = request.into_inner();
@@ -68,23 +77,52 @@ pub async fn login(pool: web::Data<DBPool>, request: web::Form<UserLoginRequest>
     };
 
     //THIS IS BAD
-    let db2 = pool.get().map_err(|err| UserAuthError::ServerError)?;
 
-    let token = web::block(move || insert_new_session(&db2,&user.unwrap()))
+
+    //TODO: Check if a session already exists and reuse that one (?)
+    let get_token_from_request = {
+        let db = pool.get().map_err(|err| UserAuthError::ServerError)?;
+        get_token(&db,&user.as_ref().unwrap())
+    };
+
+    let mut token= web::block(|| get_token_from_request)
         .await
         .map_err(|e| UserAuthError::ServerError)?;
-    println!("Inserted session");
 
-    if let Err(e) = token{
+
+    //TODO:  Yeah at this point unwraping would actually be safer
+
+    let insert_token_from_request = {
+        let db = pool.get().unwrap();
+        insert_new_session(&db, &user.as_ref().unwrap())
+    };
+
+    if let Err(e) = token {
+        token = web::block(|| insert_token_from_request)
+            .await
+            .map_err(|e| UserAuthError::ServerError)?
+            .map_err(|e| SessionRetrieveError::NoSessionFound)
+    }
+
+    if let Err(_) = token {
+        if let None = &request.redirect_error {
+            return Ok(HttpResponse::NotFound().finish());
+        }
         return Ok(request.get_error_response())
     };
-    println!("OK: Redirecting the user");
 
+    if let None = &request.redirect_success {
+        return Ok(HttpResponse::Ok()
+            .json(LoginResponse {
+                username: request.username,
+                user_session_token: token.unwrap(),
+                info: user.unwrap().get_info().await.unwrap()
+            }));
+    }
+    println!("OK: Redirecting the user");
     Ok(request.get_success_response(token.unwrap()))
 }
 
-//TODO: Ask for url instead of just returning a cookie
-//NOTE: THIS IS HORRIBLE
 pub async fn login_simple(pool: web::Data<DBPool>, user: web::Form<UserInfo>) -> Result<HttpResponse, UserAuthError> {
     //TODO: This currently requires a lot of different queries, might perhaps be very slow
     let user_info = user.into_inner();

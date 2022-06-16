@@ -2,7 +2,7 @@ use actix_web::http::header::LOCATION;
 use actix_web::http::{HeaderValue, StatusCode};
 use actix_web::{HttpResponse, Resource};
 use rand::{Rng, RngCore};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use crate::session::{SessionCreationError, SessionHolder};
 use diesel::dsl::*;
 use diesel::MysqlConnection;
@@ -14,8 +14,27 @@ pub trait ResourceOwnerCredentials {
     fn get_key(&self) -> &str;
     fn get_secret(&self) -> &str;
 }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CitizenAddress {
+    pub street: String,
+    pub housenumber: String,
+    pub city_code: u32,
+    pub city: String,
+}
 
-#[derive(Queryable, Identifiable)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CitizenInfo {
+    pub firstname: String,
+    pub lastname: String,
+    pub gender: String,
+    pub birthdate: String,
+    pub place_of_birth: Option<String>,
+    pub email: Option<String>,
+    pub spouse_ids: Option<Vec<u32>>,
+    pub address: CitizenAddress
+}
+
+#[derive(Queryable, Identifiable, Clone)]
 #[table_name = "Users"]
 pub struct User {
     pub(crate) id: u64,
@@ -33,6 +52,25 @@ impl SessionHolder for User {
     }
 }
 
+#[derive(Debug)]
+pub enum CitizenInfoRetrievalError {
+    RequestError(reqwest::Error),
+    ParsingError(serde_json::Error)
+}
+impl User {
+    pub async fn get_info(&self) -> Result<CitizenInfo, CitizenInfoRetrievalError> {
+        println!("Trying to get information about user {} with id {}", self.username, self.id);
+
+        let user_info = reqwest::get(format!("http://www.smartcityproject.net:9710/api/citizen/{}", self.id))
+            .await
+            .map_err(|e| CitizenInfoRetrievalError::RequestError(e))?
+            .text()
+            .await
+            .map_err(|e| CitizenInfoRetrievalError::RequestError(e))?;
+
+        serde_json::from_str(&user_info).map_err(|e| CitizenInfoRetrievalError::ParsingError(e))
+    }
+}
 #[derive(Clone, Debug, Deserialize)]
 pub struct UserInfo {
     pub(crate) username: String,

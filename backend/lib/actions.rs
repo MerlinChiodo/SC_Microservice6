@@ -149,6 +149,9 @@ pub fn get_session(db: &MysqlConnection, user: &User) -> Result<Session, Session
 
     if session.is_valid(){(Ok(session))} else {Err(SessionRetrieveError::SessionExpired)}
 }
+pub fn get_token(db: &MysqlConnection, user: &User) -> Result<String, SessionRetrieveError> {
+    Ok(get_session(db, user)?.token)
+}
 
 pub fn check_token(db: &MysqlConnection, _token: &String) -> Result<User, SessionRetrieveError> {
     //NOTE: 2 Queries right now since diesel only supports now filter with timestamps. Will be changed in the future
