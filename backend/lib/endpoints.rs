@@ -51,9 +51,8 @@ pub async fn login_external(request: web::Query<ExternalUserLoginRequest>) -> im
 
 }
 
-//NOTE: THIS IS HORRIBLE
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct LoginResponse {
+pub struct UserInfoRequestResponse {
     citizen_id: u64,
     username: String,
     user_session_token: String,
@@ -114,7 +113,7 @@ pub async fn login(pool: web::Data<DBPool>, request: web::Form<UserLoginRequest>
 
     if let None = &request.redirect_success {
         return Ok(HttpResponse::Ok()
-            .json(LoginResponse {
+            .json(UserInfoRequestResponse {
                 citizen_id: user.as_ref().unwrap().id,
                 username: request.username,
                 user_session_token: token.unwrap(),
@@ -153,25 +152,30 @@ pub async fn login_simple(pool: web::Data<DBPool>, user: web::Form<UserInfo>) ->
 
 //TODO: Proper request version for this should take an redirect uri
 pub async fn validate_token_simple(pool: web::Data<DBPool>, token: web::Form<Token>) -> Result<HttpResponse, SessionRetrieveError> {
-    let db = pool.get().expect("Unable to get db connection");
 
-    let user = web::block(move || check_token(&db, &token.code))
+    let check_token_from_request = {
+        let code = &token.code;
+        let db = pool.get().expect("Unable to get db connection");
+        check_token(&db, &code)
+    };
+
+    let user = web::block(|| check_token_from_request)
         .await
         .map_err(|_| SessionRetrieveError::ServerError)?;
+
     if let Err(e) = &user {
         return  Ok(HttpResponse::NotFound().finish());
     }
     let user = user?;
-    let citizen_info = reqwest::get(format!("http://www.smartcityproject.net:9710/api/citizen/{}", user.id))
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
+    let citizen_info = user.get_info().await.unwrap();
 
-    let json_data: Value = serde_json::from_str(&citizen_info).unwrap();
-
-    Ok(HttpResponse::Ok().json(json_data))
+    Ok(HttpResponse::Ok()
+        .json(UserInfoRequestResponse {
+            citizen_id: user.id,
+            username: user.username,
+            user_session_token: token.code.clone(),
+            info: citizen_info
+        }))
 }
 
 
