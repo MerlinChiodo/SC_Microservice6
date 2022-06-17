@@ -54,6 +54,7 @@ pub async fn login_external(request: web::Query<ExternalUserLoginRequest>) -> im
 //NOTE: THIS IS HORRIBLE
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct LoginResponse {
+    citizen_id: u64,
     username: String,
     user_session_token: String,
     info: CitizenInfo
@@ -114,6 +115,7 @@ pub async fn login(pool: web::Data<DBPool>, request: web::Form<UserLoginRequest>
     if let None = &request.redirect_success {
         return Ok(HttpResponse::Ok()
             .json(LoginResponse {
+                citizen_id: user.as_ref().unwrap().id,
                 username: request.username,
                 user_session_token: token.unwrap(),
                 info: user.unwrap().get_info().await.unwrap()
