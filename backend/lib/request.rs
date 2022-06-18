@@ -1,3 +1,5 @@
+use std::fmt;
+use std::fmt::{Display, Formatter};
 use actix_web::error::Kind::Http;
 use actix_web::http::{HeaderValue, StatusCode};
 use actix_web::http::header::LOCATION;
@@ -54,3 +56,24 @@ impl Request for RegistrationRequest {
         }
     }
 }
+
+
+#[derive(Debug)]
+pub enum UserRegistrationError {
+    HashError(argon2::Error),
+    InsertionError(diesel::result::Error)
+}
+
+impl Display for UserRegistrationError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            UserRegistrationError::HashError(e) => {
+                write!(f, "HashError: {}", e)
+            }
+            UserRegistrationError::InsertionError(e) => {
+                write!(f, "InsertionError: {}", e)
+            }
+        }
+    }
+}
+

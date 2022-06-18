@@ -18,29 +18,11 @@ use diesel::mysql::MysqlQueryBuilder;
 use lettre::{SmtpClient, Transport};
 use lettre_email::EmailBuilder;
 use serde_json::Value;
+use crate::request::UserRegistrationError;
 use crate::schema::PendingUsers::*;
 use crate::schema::PendingUsers::dsl::PendingUsers;
 use crate::session::{NewSession, SessionCreationError, SessionHolder};
 use crate::user::{NewPendingUser, NewUser, PendingUser, User, UserInfo};
-
-#[derive(Debug)]
-pub enum UserRegistrationError {
-    HashError(argon2::Error),
-    InsertionError(diesel::result::Error)
-}
-
-impl Display for UserRegistrationError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            UserRegistrationError::HashError(e) => {
-                write!(f, "HashError: {}", e)
-            }
-            UserRegistrationError::InsertionError(e) => {
-                write!(f, "InsertionError: {}", e)
-            }
-        }
-    }
-}
 
 #[derive(Debug)]
 pub enum UserAuthError {

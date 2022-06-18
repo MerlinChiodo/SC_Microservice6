@@ -12,9 +12,11 @@ pub mod schema;
 pub mod actions;
 pub mod models;
 pub mod endpoints;
-mod user;
-mod request;
-mod session;
+pub mod user;
+pub mod request;
+pub mod session;
+pub mod employee;
+pub mod microservices;
 
 
 

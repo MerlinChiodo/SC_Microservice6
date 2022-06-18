@@ -3,7 +3,7 @@ use actix_web::{HttpResponse, Responder, web};
 use actix_web::cookie::Cookie;
 use actix_web::error::BlockingError;
 use actix_web::error::Kind::Http;
-use crate::actions::{check_pending_user_token, check_token, get_session, get_token, get_user, insert_new_session, insert_new_user, SessionRetrieveError, UserAuthError, UserRegistrationError};
+use crate::actions::{check_pending_user_token, check_token, get_session, get_token, get_user, insert_new_session, insert_new_user, SessionRetrieveError, UserAuthError};
 use crate::models::{ExternalUserLoginRequest, Token, UserLoginRequest};
 use crate::server::DBPool;
 use actix_web::post;
