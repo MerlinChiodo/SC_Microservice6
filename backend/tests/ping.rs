@@ -11,7 +11,7 @@ use backend::*;
 use backend::actions::{check_token, get_session, get_user, insert_new_session, insert_new_user};
 use backend::models::{User, UserIdentityInfo};
 use backend::schema::Users::username;
-use backend::server::{connect_to_db, server_start, ServerConfig};
+use backend::server::{connect_to_db, server_start, BackendServer};
 
 #[tokio::test]
 async fn ping_works() {
@@ -20,7 +20,7 @@ async fn ping_works() {
         .build();
 
     let server_config = server_config_file
-        .map(|f| f.try_deserialize::<ServerConfig>().expect("Invalid config file"))
+        .map(|f| f.try_deserialize::<BackendServer>().expect("Invalid config file"))
         .ok();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
 
@@ -66,7 +66,7 @@ fn debug_connect_to_db() -> server::DBPool {
         .build();
 
     let server_config = server_config_file
-        .map(|f| f.try_deserialize::<ServerConfig>().expect("Invalid config file"))
+        .map(|f| f.try_deserialize::<BackendServer>().expect("Invalid config file"))
         .expect("Unable to parse config file");
 
     connect_to_db(&server_config).unwrap()
