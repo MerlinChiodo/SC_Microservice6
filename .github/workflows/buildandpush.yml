@@ -32,6 +32,6 @@ jobs:
           push: true
           tags: merlinchiodo/smartcity:SmartAuth,merlinchiodo/smartcity:SmartAuth_1.0.0-${{ github.sha }}
           build-args: |
-            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            DATABASE_URL=${{ secrets.DATABASE2_URL }}
             AMQP_ADDR=${{ secrets.AMQP_ADDR }}
           
