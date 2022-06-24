@@ -61,7 +61,8 @@ impl Request for RegistrationRequest {
 #[derive(Debug)]
 pub enum UserRegistrationError {
     HashError(argon2::Error),
-    InsertionError(diesel::result::Error)
+    InsertionError(diesel::result::Error),
+    UnknownError,
 }
 
 impl Display for UserRegistrationError {
@@ -72,6 +73,9 @@ impl Display for UserRegistrationError {
             }
             UserRegistrationError::InsertionError(e) => {
                 write!(f, "InsertionError: {}", e)
+            }
+            UserRegistrationError::UnknownError => {
+                write!(f, "Unknown Error")
             }
         }
     }

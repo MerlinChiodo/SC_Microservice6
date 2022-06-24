@@ -33,7 +33,7 @@ use lapin::options::{BasicAckOptions, BasicConsumeOptions};
 use lapin::types::FieldTable;
 use moon::futures::StreamExt;
 use serde_json::{Number, Value};
-use crate::endpoints::{login, login_external, login_page, login_simple, register, validate_token_simple};
+use crate::endpoints::{employee_login, employee_register, employee_verify, login, login_external, login_page, login_simple, register, validate_token_simple};
 
 pub type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
 pub type RMQPool = deadpool::managed::Object<deadpool_lapin::Manager>;
@@ -44,7 +44,6 @@ use diesel::r2d2;
 use lettre::{smtp, SmtpClient, SmtpTransport};
 use lettre::smtp::authentication::Credentials;
 use crate::actions::{check_token, insert_new_pending_user, send_citizen_code};
-use crate::models::Token;
 use crate::server::RmqError::LapinError;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -183,6 +182,9 @@ pub fn set_server_api_routes(cfg: &mut web::ServiceConfig) {
         .route("/test", web::get().to(|| async {"Hey"}))
         .route("/page/login", web::get().to(login_page))
         .route("/external", web::get().to(login_external))
+        .route("/employee/register", web::post().to(employee_register))
+        .route("/employee/login", web::post().to(employee_login))
+        .route("/employee/verify", web::post().to(employee_verify))
         .service(on_login_test);
 }
 

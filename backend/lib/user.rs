@@ -39,7 +39,7 @@ pub struct CitizenInfo {
 pub struct User {
     pub(crate) id: u64,
     pub username: String,
-    hash: String,
+    pub(crate) hash: String,
 }
 
 impl SessionHolder for User {
@@ -71,7 +71,7 @@ impl User {
         serde_json::from_str(&user_info).map_err(|e| CitizenInfoRetrievalError::ParsingError(e))
     }
 }
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct UserInfo {
     pub(crate) username: String,
     pub(crate) password: String

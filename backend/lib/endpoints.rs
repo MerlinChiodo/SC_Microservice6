@@ -3,8 +3,8 @@ use actix_web::{HttpResponse, Responder, web};
 use actix_web::cookie::Cookie;
 use actix_web::error::BlockingError;
 use actix_web::error::Kind::Http;
-use crate::actions::{check_pending_user_token, check_token, get_session, get_token, get_user, insert_new_session, insert_new_user, SessionRetrieveError, UserAuthError};
-use crate::models::{ExternalUserLoginRequest, Token, UserLoginRequest};
+use crate::actions::{check_pending_user_token, check_token, create_employee, get_employee_info, get_session, get_token, get_user, insert_new_session, insert_new_user, login_employee, SessionRetrieveError, UserAuthError, verify_employee};
+use crate::models::{ExternalUserLoginRequest, NewEmployeeInfo, UserLoginRequest};
 use crate::server::DBPool;
 use actix_web::post;
 use moon::actix_files::NamedFile;
@@ -13,6 +13,7 @@ use crate::request::{RegistrationRequest, Request};
 use crate::schema::Users::username;
 use crate::user::{CitizenInfo, UserInfo};
 use actix_web::get;
+use actix_web::web::to;
 use serde_json::Value;
 use serde::Deserialize;
 use serde::Serialize;
@@ -149,6 +150,11 @@ pub async fn login_simple(pool: web::Data<DBPool>, user: web::Form<UserInfo>) ->
         .cookie(cookie)
         .finish())
 }
+#[derive(Deserialize, Serialize)]
+
+pub struct Token {
+    pub code: String
+}
 
 //TODO: Proper request version for this should take an redirect uri
 pub async fn validate_token_simple(pool: web::Data<DBPool>, token: web::Form<Token>) -> Result<HttpResponse, SessionRetrieveError> {
@@ -181,4 +187,113 @@ pub async fn validate_token_simple(pool: web::Data<DBPool>, token: web::Form<Tok
 
 pub async fn login_page() -> actix_web::Result<NamedFile> {
     Ok(NamedFile::open(PathBuf::from(r"static_content/login_example.html")).unwrap())
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct EmployeeRegisterRequest {
+    pub code: String,
+
+    #[serde(flatten)]
+    pub info: NewEmployeeInfo,
+
+    #[serde(flatten)]
+    pub credentials: UserInfo
+
+}
+
+pub async fn employee_register(pool: web::Data<DBPool>, data: web::Form<EmployeeRegisterRequest>) -> Result<HttpResponse, UserAuthError >{
+    let data = data.into_inner();
+    let db = pool.get().map_err(|_| UserAuthError::ServerError)?;
+
+    if !(&data.code == "ROOT") {
+        let user_verification = move || {
+            verify_employee(&db, &data.code.clone()).map_err(|_| UserAuthError::UserNotFound)
+        };
+
+        web::block(user_verification)
+            .await
+            .map_err(|_|UserAuthError::ServerError)??;
+    }
+
+    let user_creation = move || {
+        let db = pool.clone().get()
+            .map_err(|_| UserAuthError::ServerError)?;
+        create_employee(&db, &data.info, &data.credentials).map_err(|_| UserAuthError::ServerError)
+    };
+
+    web::block(user_creation).await.map_err(|_| UserAuthError::ServerError)??;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+
+#[derive(Deserialize, Serialize)]
+pub struct EmployeeLoginRequestRespone {
+    id: u64,
+    username: String,
+    pub employee_session_token: String,
+    pub info: NewEmployeeInfo,
+
+}
+pub async fn employee_login(pool: web::Data<DBPool>, credentials: web::Form<UserInfo>) -> Result<HttpResponse, UserAuthError> {
+    let credentials = credentials.into_inner();
+    let db = pool.get().map_err(|_| UserAuthError::ServerError)?;
+
+    let (employee, session) = web::block(move || login_employee(&db, &credentials))
+        .await
+        .map_err(|_| UserAuthError::ServerError)??;
+    let e_username = employee.username.clone();
+    let e_id = employee.id.clone();
+    let get_info = move || {
+        let db = &pool.get()
+            .map_err(|_| UserAuthError::ServerError)?;
+        get_employee_info(&db, &employee).map_err(|_| UserAuthError::UserNotFound)
+    };
+
+    let info = web::block(get_info)
+        .await
+        .map_err(|_| UserAuthError::ServerError)??;
+
+    let response = EmployeeLoginRequestRespone {
+        id: e_id,
+        username: e_username,
+        employee_session_token: session.token,
+        info: NewEmployeeInfo {
+            firstname: info.firstname,
+            lastname: info.lastname,
+        }
+    };
+
+    Ok(HttpResponse::Ok().json(response))
+}
+
+pub async fn employee_verify(pool: web::Data<DBPool>, token: web::Form<Token>) -> Result<HttpResponse, UserAuthError> {
+    let db = pool.get().map_err(|_| UserAuthError::ServerError)?;
+    let token = token.into_inner().code;
+    let (session, employee) = web::block(move || verify_employee(&db, &token)).await.map_err(|_| UserAuthError::ServerError)?.map_err(|_| UserAuthError::UserNotFound)?;
+
+    let e_username = employee.username.clone();
+    let e_id = employee.id.clone();
+    let get_info = move || {
+        let db = &pool.get()
+            .map_err(|_| UserAuthError::ServerError)?;
+        get_employee_info(&db, &employee).map_err(|_| UserAuthError::UserNotFound)
+    };
+
+    let info = web::block(get_info)
+        .await
+        .map_err(|_| UserAuthError::ServerError)??;
+
+    let response = EmployeeLoginRequestRespone {
+        id: e_id,
+        username: e_username,
+        employee_session_token: session.token,
+        info: NewEmployeeInfo {
+            firstname: info.firstname,
+            lastname: info.lastname,
+        }
+    };
+
+    Ok(HttpResponse::Ok().json(response))
+
 }

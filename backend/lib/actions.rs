@@ -3,11 +3,11 @@ use std::fmt::{Display, format, Formatter, write};
 use actix_web::http::StatusCode;
 use actix_web::{HttpResponse, ResponseError};
 use actix_web::error::BlockingError;
-use diesel::{ExpressionMethods, MysqlConnection, QueryDsl, RunQueryDsl};
+use diesel::{BoolExpressionMethods, ExpressionMethods, MysqlConnection, QueryDsl, RunQueryDsl};
 use diesel_migrations::name;
 use diesel::associations;
 use rand::{Rng, RngCore};
-use crate::models::{Session};
+use crate::models::{EmployeeInfoModel, EmployeeLogin, EmployeeSession, NewEmployeeInfo, NewEmployeeLogin, NewEmployeeSession, Session};
 use crate::schema::Sessions::dsl::Sessions;
 use crate::schema::Users::dsl::Users;
 use crate::schema::Users::{id, username};
@@ -19,8 +19,15 @@ use lettre::{SmtpClient, Transport};
 use lettre_email::EmailBuilder;
 use serde_json::Value;
 use crate::request::UserRegistrationError;
+use crate::schema::EmployeeInfo::dsl::EmployeeInfo;
+use crate::schema::EmployeeInfo::{firstname, lastname};
+use crate::schema::EmployeeLogins::dsl::EmployeeLogins;
+use crate::schema::EmployeeSessions::dsl::EmployeeSessions;
+use crate::schema::EmployeeSessions::token as e_token;
+use crate::schema::EmployeeLogins::id as ee_id;
 use crate::schema::PendingUsers::*;
 use crate::schema::PendingUsers::dsl::PendingUsers;
+use crate::schema::EmployeeLogins::username as e_username;
 use crate::session::{NewSession, SessionCreationError, SessionHolder};
 use crate::user::{NewPendingUser, NewUser, PendingUser, User, UserInfo};
 
@@ -196,4 +203,92 @@ pub fn check_pending_user_token(db: &MysqlConnection, _token: &str) -> Result<Pe
         .first(db)?;
 
     Ok(pending_user)
+}
+
+pub fn create_employee(db: &MysqlConnection, personal_data: &NewEmployeeInfo, credentials: &UserInfo) -> Result<(), UserRegistrationError> {
+    insert_into(EmployeeInfo)
+        .values(personal_data)
+        .execute(db)
+        .map_err(|err| UserRegistrationError::InsertionError(err))?;
+
+    let mut employees = EmployeeInfo
+        .filter(firstname.eq(&personal_data.firstname).and(lastname.eq(&personal_data.lastname)))
+        .limit(1)
+        .load::<EmployeeInfoModel>(db)
+        .map_err(|err| UserRegistrationError::InsertionError(err))?;
+
+    let employee_result = employees.pop().ok_or(UserRegistrationError::UnknownError)?;
+
+    let secret = NewUser::new(0, credentials).map_err(|e| UserRegistrationError::HashError(e))?;
+    let new_employee = NewEmployeeLogin {
+        info_id: employee_result.id,
+        username: credentials.username.clone(),
+        hash: secret.hash.clone()
+    };
+    insert_into(EmployeeLogins)
+        .values(&new_employee)
+        .execute(db)
+        .map_err(|err| UserRegistrationError::InsertionError(err))?;
+
+    Ok(())
+}
+
+pub fn login_employee(db: &MysqlConnection, credentials: &UserInfo) -> Result<(EmployeeLogin, NewEmployeeSession), UserAuthError> {
+    let mut results = EmployeeLogins.filter(e_username.eq(&credentials.username))
+        .limit(1)
+        .load::<EmployeeLogin>(db)
+        .map_err(|err| UserAuthError::DbError(err))?;
+
+    let emp_result = results
+        .pop()
+        .ok_or(UserAuthError::UserNotFound)?;
+
+    emp_result.verify(credentials.password.as_str())
+        .map_err(|e| UserAuthError::VerifyError(e))?
+        .then(|| true)
+        .ok_or(UserAuthError::WrongPassword)?;
+
+    let session: Result<EmployeeSession, diesel::result::Error>= EmployeeSession::belonging_to(&emp_result).first(db);
+
+    if let Ok(s)= session {
+        return Ok((emp_result, NewEmployeeSession {
+            e_id: s.e_id,
+            token: s.token,
+            expires: s.expires
+        }));
+    }
+
+    let session = NewSession::new(&emp_result);
+    let emp_session = NewEmployeeSession {
+        e_id: emp_result.id,
+        token: session.token,
+        expires: session.expires };
+
+    insert_into(EmployeeSessions)
+        .values(&emp_session)
+        .execute(db)
+        .map_err(|err| UserAuthError::DbError(err))?;
+
+    Ok((emp_result, emp_session))
+}
+
+pub fn verify_employee(db: &MysqlConnection, _token: &str) -> Result<(EmployeeSession, EmployeeLogin), SessionRetrieveError> {
+    let session: EmployeeSession = EmployeeSessions.filter(e_token.eq(_token))
+        .first(db)
+        .map_err(|err| SessionRetrieveError::DbError(err))?;
+
+    session.is_valid().then(|| true).ok_or(SessionRetrieveError::NoSessionFound)?;
+
+    let employee = EmployeeLogins.filter(ee_id.eq(session.e_id))
+        .first(db)
+        .map_err(|err| SessionRetrieveError::DbError(err))?;
+
+    Ok((session, employee))
+}
+
+pub fn get_employee_info(db: &MysqlConnection, employee: &EmployeeLogin) -> Result<EmployeeInfoModel, SessionRetrieveError> {
+    EmployeeInfo
+        .filter(crate::schema::EmployeeInfo::id.eq(employee.info_id))
+        .first(db)
+        .map_err(|err| SessionRetrieveError::DbError(err))
 }
