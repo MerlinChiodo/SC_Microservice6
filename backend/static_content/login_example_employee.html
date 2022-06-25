@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in example • Pico.css</title>
+    <meta name="description" content="A minimalist layout for Login pages. Built with Pico CSS.">
+    <link rel="shortcut icon" href="https://picocss.com/favicon.ico">
+    <link rel="canonical" href="https://picocss.com/examples/sign-in/">
+
+    <!-- Pico.css -->
+    <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@latest/css/pico.min.css">
+
+    <!-- Custom styles for this example -->
+    <link rel="stylesheet" href="custom.css">
+</head>
+
+<body>
+
+<!-- Nav -->
+<!-- Main -->
+<main class="container">
+    <article class="grid">
+        <div>
+            <hgroup>
+                <h1>Anmelden</h1>
+                <h2>Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam</h2>
+            </hgroup>
+            <form id="login_form" action="/employee/login" enctype="application/x-www-form-urlencoded" method="post" >
+                <input type="text" name="username" placeholder="Login" aria-label="Login" autocomplete="nickname" required>
+                <input type="password" name="password" placeholder="Password" aria-label="Password" autocomplete="current-password" required>
+                <fieldset>
+                    <label for="remember">
+                        <input type="checkbox" role="switch" id="remember" name="remember">
+                        Remember me
+                    </label>
+                </fieldset>
+                <button type="submit" class="contrast"</button>
+            </form>
+        </div>
+        <div></div>
+    </article>
+</main><!-- ./ Main -->
+<script>
+    let parent = document.getElementById("login_form");
+
+    for(let pair of new URLSearchParams(document.location.search)) {
+        console.log(pair[0])
+        console.log(pair[1])
+        let input = document.createElement("input");
+        input.setAttribute("name", pair[0]);
+        input.setAttribute("type", "hidden");
+        input.setAttribute("value", pair[1]);
+        parent.appendChild(input);
+    }
+</script>
+</body>
+
+</html>

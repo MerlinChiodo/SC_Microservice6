@@ -33,7 +33,7 @@ use lapin::options::{BasicAckOptions, BasicConsumeOptions};
 use lapin::types::FieldTable;
 use moon::futures::StreamExt;
 use serde_json::{Number, Value};
-use crate::endpoints::{employee_login, employee_register, employee_verify, login, login_external, login_page, login_simple, register, validate_token_simple};
+use crate::endpoints::{employee_login, employee_login_external, employee_register, employee_verify, login, login_external, login_page, login_simple, register, validate_token_simple};
 
 pub type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
 pub type RMQPool = deadpool::managed::Object<deadpool_lapin::Manager>;
@@ -185,6 +185,7 @@ pub fn set_server_api_routes(cfg: &mut web::ServiceConfig) {
         .route("/employee/register", web::post().to(employee_register))
         .route("/employee/login", web::post().to(employee_login))
         .route("/employee/verify", web::post().to(employee_verify))
+        .route("/employee/external", web::get().to(employee_login_external))
         .service(on_login_test);
 }
 

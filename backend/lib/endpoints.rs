@@ -4,7 +4,7 @@ use actix_web::cookie::Cookie;
 use actix_web::error::BlockingError;
 use actix_web::error::Kind::Http;
 use crate::actions::{check_pending_user_token, check_token, create_employee, get_employee_info, get_session, get_token, get_user, insert_new_session, insert_new_user, login_employee, SessionRetrieveError, UserAuthError, verify_employee};
-use crate::models::{ExternalUserLoginRequest, NewEmployeeInfo, UserLoginRequest};
+use crate::models::{EmployeeLogin, ExternalUserLoginRequest, NewEmployeeInfo, NewEmployeeSession, UserLoginRequest};
 use crate::server::DBPool;
 use actix_web::post;
 use moon::actix_files::NamedFile;
@@ -13,7 +13,9 @@ use crate::request::{RegistrationRequest, Request};
 use crate::schema::Users::username;
 use crate::user::{CitizenInfo, UserInfo};
 use actix_web::get;
+use actix_web::http::HeaderValue;
 use actix_web::web::to;
+use reqwest::header::LOCATION;
 use serde_json::Value;
 use serde::Deserialize;
 use serde::Serialize;
@@ -49,6 +51,11 @@ pub async fn register(pool: web::Data<DBPool>,
 pub async fn login_external(request: web::Query<ExternalUserLoginRequest>) -> impl Responder {
     println!("Hey!");
     NamedFile::open(PathBuf::from(r"static_content/login_example.html")).unwrap()
+
+}
+pub async fn employee_login_external(request: web::Query<ExternalUserLoginRequest>) -> impl Responder {
+    println!("Hey!");
+    NamedFile::open(PathBuf::from(r"static_content/login_example_employee.html")).unwrap()
 
 }
 
@@ -235,13 +242,31 @@ pub struct EmployeeLoginRequestRespone {
     pub info: NewEmployeeInfo,
 
 }
-pub async fn employee_login(pool: web::Data<DBPool>, credentials: web::Form<UserInfo>) -> Result<HttpResponse, UserAuthError> {
+
+
+pub async fn employee_login(pool: web::Data<DBPool>, credentials: web::Form<UserLoginRequest>) -> Result<HttpResponse, UserAuthError> {
     let credentials = credentials.into_inner();
     let db = pool.get().map_err(|_| UserAuthError::ServerError)?;
 
-    let (employee, session) = web::block(move || login_employee(&db, &credentials))
+    let employee_credentials = UserInfo {
+        username: credentials.username,
+        password: credentials.password
+    };
+
+    let (employee, session) = match web::block(move || login_employee(&db, &employee_credentials))
         .await
-        .map_err(|_| UserAuthError::ServerError)??;
+        .map_err(|_| UserAuthError::ServerError)? {
+        Ok((e,s)) => {(e,s)}
+        Err(_) => {
+            if let Some(url) = credentials.redirect_error {
+                return Ok(HttpResponse::Found()
+                    .append_header((LOCATION, HeaderValue::try_from(url).unwrap())).finish());
+            }
+            return Err(UserAuthError::UserNotFound);
+        }
+    };
+
+
     let e_username = employee.username.clone();
     let e_id = employee.id.clone();
     let get_info = move || {
@@ -263,8 +288,18 @@ pub async fn employee_login(pool: web::Data<DBPool>, credentials: web::Form<User
             lastname: info.lastname,
         }
     };
+    let cookie = Cookie::build("employee_session_token", response.employee_session_token.clone())
+        .domain("smartcityproject.net")
+        .finish();
 
-    Ok(HttpResponse::Ok().json(response))
+    if let Some(url) = credentials.redirect_success {
+        let http_response = HttpResponse::Found()
+            .append_header((LOCATION, HeaderValue::try_from(format!("{}?token={}", url, &response.employee_session_token)).unwrap()))
+            .cookie(cookie.clone())
+            .finish();
+        return Ok(http_response)
+    }
+    Ok(HttpResponse::Ok().cookie(cookie).json(response))
 }
 
 pub async fn employee_verify(pool: web::Data<DBPool>, token: web::Form<Token>) -> Result<HttpResponse, UserAuthError> {
