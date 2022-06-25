@@ -1,5 +1,6 @@
 use std::string::String;
 use std::{fmt, time};
+use std::borrow::Borrow;
 use diesel::prelude::*;
 use actix_web::{dev, error, get, http, HttpResponseBuilder, ResponseError};
 use moon::{
@@ -369,17 +370,7 @@ impl BodyTest for Bytes {
     }
 }
 fn render_500<B>(mut res: dev::ServiceResponse<B>) -> actix_web::Result<ErrorHandlerResponse<B>> {
-    /*
     let req = res.request();
-    let res = res.map_body(|_, _| ResponseBody::Body(Body::from("Hey")).into_body());
-    */
-    let error_message: String = match res.response().error() {
-        Some(e) => format!("{}", json!({"type": "request", "error": e.to_string()})),
-        None => String::from("Unknown")
-    };
-
-
-    let new_body=  HttpResponse::BadRequest().json(error_message).into_body();
 
     res.headers_mut()
         .insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("application/json"));
@@ -396,7 +387,24 @@ pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result
 
     let mail_server = create_mail_sender(&config)
         .map_err(|err| ServerCreationError::MailError(err))?;
-
+    let query_cfg = web::QueryConfig::default()
+        .error_handler(|err, req| {
+            error::InternalError::from_response(
+                "",
+                HttpResponse::BadRequest()
+                    .content_type("application/json")
+                    .body(format!(r#"{{"error": "{:?}"}}"#, err)),
+            ).into()
+        });
+    let form_cfg= web::FormConfig::default()
+        .error_handler(|err, req| {
+            error::InternalError::from_response(
+                "",
+                HttpResponse::BadRequest()
+                    .content_type("application/json")
+                    .body(format!(r#"{{"error": "{:?}"}}"#, err)),
+            ).into()
+        });
     let rmq_thread = rmg_listen(&mail_server, db_pool.clone(), rmq_pool.clone());
     let app = move || {
         let redirect = Redirect::new()
@@ -413,6 +421,15 @@ pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result
                     HttpResponse::BadRequest()
                         .content_type("application/json")
                         .body(format!(r#"{{"error": "{}"}}"#, err)),
+                ).into()
+            }))
+            .app_data(query_cfg)
+            .app_data(web::FormConfig::default().error_handler(|err, req| {
+                error::InternalError::from_response(
+                    "",
+                    HttpResponse::BadRequest()
+                        .content_type("application/json")
+                        .body(format!(r#"{{"error": "{:?}"}}"#, err)),
                 ).into()
             }))
             .wrap(Cors::default().allowed_origin_fn(move |origin, _| {
