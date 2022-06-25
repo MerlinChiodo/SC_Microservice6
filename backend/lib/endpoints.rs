@@ -164,7 +164,7 @@ pub struct Token {
 }
 
 //TODO: Proper request version for this should take an redirect uri
-pub async fn validate_token_simple(pool: web::Data<DBPool>, token: web::Form<Token>) -> Result<HttpResponse, SessionRetrieveError> {
+pub async fn validate_token_simple(pool: web::Data<DBPool>, token: web::Form<Token>) -> actix_web::Result<HttpResponse, SessionRetrieveError> {
 
     let check_token_from_request = {
         let code = &token.code;
@@ -177,7 +177,7 @@ pub async fn validate_token_simple(pool: web::Data<DBPool>, token: web::Form<Tok
         .map_err(|_| SessionRetrieveError::ServerError)?;
 
     if let Err(e) = &user {
-        return  Ok(HttpResponse::NotFound().finish());
+        return  Err(SessionRetrieveError::NoSessionFound);
     }
     let user = user?;
     let citizen_info = user.get_info().await.unwrap();
@@ -208,7 +208,7 @@ pub struct EmployeeRegisterRequest {
 
 }
 
-pub async fn employee_register(pool: web::Data<DBPool>, data: web::Form<EmployeeRegisterRequest>) -> Result<HttpResponse, UserAuthError >{
+pub async fn employee_register(pool: web::Data<DBPool>, data: web::Form<EmployeeRegisterRequest>) -> actix_web::Result<HttpResponse, UserAuthError >{
     let data = data.into_inner();
     let db = pool.get().map_err(|_| UserAuthError::ServerError)?;
 

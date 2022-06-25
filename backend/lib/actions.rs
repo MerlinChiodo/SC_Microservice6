@@ -1,7 +1,7 @@
 use std::fmt;
 use std::fmt::{Display, format, Formatter, write};
 use actix_web::http::StatusCode;
-use actix_web::{HttpResponse, ResponseError};
+use actix_web::{HttpResponse, ResponseError, error, Result};
 use actix_web::error::BlockingError;
 use diesel::{BoolExpressionMethods, ExpressionMethods, MysqlConnection, QueryDsl, RunQueryDsl};
 use diesel_migrations::name;
@@ -17,7 +17,8 @@ use diesel::dsl::*;
 use diesel::mysql::MysqlQueryBuilder;
 use lettre::{SmtpClient, Transport};
 use lettre_email::EmailBuilder;
-use serde_json::Value;
+use moon::actix_http;
+use serde_json::{json, Value};
 use crate::request::UserRegistrationError;
 use crate::schema::EmployeeInfo::dsl::EmployeeInfo;
 use crate::schema::EmployeeInfo::{firstname, lastname};
@@ -30,7 +31,7 @@ use crate::schema::PendingUsers::dsl::PendingUsers;
 use crate::schema::EmployeeLogins::username as e_username;
 use crate::session::{NewSession, SessionCreationError, SessionHolder};
 use crate::user::{NewPendingUser, NewUser, PendingUser, User, UserInfo};
-
+use serde::{Serialize, Deserialize};
 #[derive(Debug)]
 pub enum UserAuthError {
     DbError(diesel::result::Error),
@@ -43,7 +44,7 @@ pub enum UserAuthError {
 impl Display for UserAuthError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            UserAuthError::UserNotFound => write!(f,"The user does not exist"),
+            UserAuthError::UserNotFound => write!(f,"The user or session does not exist"),
             UserAuthError::WrongPassword => write!(f, "The provided password does not match the username"),
             _ => write!(f, "Internal error")
         }
@@ -58,7 +59,7 @@ impl ResponseError for UserAuthError {
         }
     }
     fn error_response(&self) -> HttpResponse {
-        HttpResponse::build(self.status_code()).finish()
+        HttpResponse::build(self.status_code()).json(json!({"type": "auth", "error": self.to_string()}))
     }
 }
 
@@ -89,7 +90,9 @@ impl ResponseError for SessionRetrieveError {
             _ => StatusCode::NOT_FOUND
         }
     }
-    fn error_response(&self) -> HttpResponse {HttpResponse::build(self.status_code()).finish()}
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).json(json!({"type": "session", "error": self.to_string()}))
+    }
 }
 
 pub fn insert_new_user(db: &MysqlConnection, user: UserInfo, uid: u64) -> Result<(), UserRegistrationError> {

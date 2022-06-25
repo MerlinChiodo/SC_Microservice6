@@ -1,7 +1,7 @@
 use std::string::String;
 use std::{fmt, time};
 use diesel::prelude::*;
-use actix_web::get;
+use actix_web::{dev, error, get, http, HttpResponseBuilder, ResponseError};
 use moon::{
     actix_cors::Cors,
     actix_web::{
@@ -25,19 +25,23 @@ use std::future::join;
 use secrecy::Secret;
 use serde::{Deserialize, Serialize};
 use std::net::TcpListener;
-use actix_web::web::route;
+use actix_web::web::{Bytes, BytesMut, route};
 use diesel::r2d2::ConnectionManager;
 use diesel_migrations::embed_migrations;
 use lapin::message::Delivery;
 use lapin::options::{BasicAckOptions, BasicConsumeOptions};
 use lapin::types::FieldTable;
-use moon::futures::StreamExt;
-use serde_json::{Number, Value};
+use moon::futures::{SinkExt, StreamExt};
+use serde_json::{json, Number, Value};
 use crate::endpoints::{employee_login, employee_login_external, employee_register, employee_verify, login, login_external, login_page, login_simple, register, validate_token_simple};
 
 pub type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
 pub type RMQPool = deadpool::managed::Object<deadpool_lapin::Manager>;
 use std::str;
+use actix_web::body::to_bytes;
+use actix_web::dev::{AnyBody, Body, ResponseBody};
+use actix_web::http::header;
+use actix_web::middleware::ErrorHandlerResponse;
 use deadpool::managed::{Object, PoolError};
 use deadpool_lapin::{Manager, Pool};
 use diesel::r2d2;
@@ -45,7 +49,6 @@ use lettre::{smtp, SmtpClient, SmtpTransport};
 use lettre::smtp::authentication::Credentials;
 use crate::actions::{check_token, insert_new_pending_user, send_citizen_code};
 use crate::server::RmqError::LapinError;
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServerConfig {
     info: AuthServerInfo,
@@ -356,6 +359,33 @@ pub async fn rmg_listen(mail: &MailServer, db_pool: DBPool, pool: deadpool_lapin
         };
     }
 }
+trait BodyTest {
+    fn as_str(&self) -> &str;
+}
+
+impl BodyTest for Bytes {
+    fn as_str(&self) -> &str {
+        std::str::from_utf8(self).unwrap()
+    }
+}
+fn render_500<B>(mut res: dev::ServiceResponse<B>) -> actix_web::Result<ErrorHandlerResponse<B>> {
+    /*
+    let req = res.request();
+    let res = res.map_body(|_, _| ResponseBody::Body(Body::from("Hey")).into_body());
+    */
+    let error_message: String = match res.response().error() {
+        Some(e) => format!("{}", json!({"type": "request", "error": e.to_string()})),
+        None => String::from("Unknown")
+    };
+
+
+    let new_body=  HttpResponse::BadRequest().json(error_message).into_body();
+
+    res.headers_mut()
+        .insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("application/json"));
+
+    Ok(ErrorHandlerResponse::Response(res))
+}
 
 pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result<(), ServerCreationError>{
     let db_pool = connect_to_db(&config)
@@ -376,6 +406,15 @@ pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result
         App::new()
             .wrap(Condition::new(CONFIG.redirect.enabled, Compat::new(redirect)))
             .wrap(Logger::new("%r %s %D ms %a"))
+            .wrap(ErrorHandlers::new().handler(StatusCode::BAD_REQUEST, render_500))
+            .app_data(web::JsonConfig::default().error_handler(|err, _req| {
+                error::InternalError::from_response(
+                    "",
+                    HttpResponse::BadRequest()
+                        .content_type("application/json")
+                        .body(format!(r#"{{"error": "{}"}}"#, err)),
+                ).into()
+            }))
             .wrap(Cors::default().allowed_origin_fn(move |origin, _| {
                 if CONFIG.cors.origins.contains("*") {
                     return true;
@@ -387,8 +426,6 @@ pub async fn server_start(config: ServerConfig, listener: TcpListener) -> Result
                 CONFIG.cors.origins.contains(origin)
             }))
 
-            .wrap(ErrorHandlers::new().handler(StatusCode::INTERNAL_SERVER_ERROR, error_handler::internal_server_error)
-                .handler(StatusCode::NOT_FOUND, error_handler::not_found))
 
             .app_data(web::Data::new(config.clone()))
             .app_data(web::Data::new(db_pool.clone()))

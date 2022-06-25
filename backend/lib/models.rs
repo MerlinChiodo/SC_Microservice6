@@ -18,6 +18,7 @@ use crate::schema::PendingUsers;
 use crate::schema::EmployeeSessions;
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use crate::schema::Users::username;
 use crate::session::{SessionCreationError, SessionHolder};
 use crate::user::{User, UserInfo};
@@ -86,7 +87,7 @@ impl UserLoginRequest {
                 .append_header((LOCATION, HeaderValue::try_from(redirect).unwrap()))
                 .finish()
         } else {
-            HttpResponse::Forbidden().finish()
+            HttpResponse::Forbidden().json(json!({"type": "auth", "error": "Username and password do not match"}))
         }
     }
 }
