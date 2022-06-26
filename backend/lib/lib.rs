@@ -1,4 +1,5 @@
 #![feature(future_join, future_poll_fn)]
+#![feature(bool_to_option)]
 #[macro_use]
 extern crate diesel;
 
@@ -12,9 +13,11 @@ pub mod schema;
 pub mod actions;
 pub mod models;
 pub mod endpoints;
-mod user;
-mod request;
-mod session;
+pub mod user;
+pub mod request;
+pub mod session;
+pub mod employee;
+pub mod microservices;
 
 
 
