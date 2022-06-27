@@ -149,7 +149,7 @@ pub async fn login_simple(pool: web::Data<DBPool>, user: web::Form<UserInfo>) ->
         .map_err(|e| UserAuthError::ServerError)?;
 
     let cookie = Cookie::build("user_session_token", token)
-        .domain("smartcityproject.com")
+        .domain("supersmartcity.de")
         .secure(true)
         .finish();
 
@@ -217,9 +217,10 @@ pub async fn employee_register(pool: web::Data<DBPool>, data: web::Form<Employee
             verify_employee(&db, &data.code.clone()).map_err(|_| UserAuthError::UserNotFound)
         };
 
-        web::block(user_verification)
+        let (session, login_data) = web::block(user_verification)
             .await
             .map_err(|_|UserAuthError::ServerError)??;
+        println!("{:?}, {:?}", session, login_data);
     }
 
     let user_creation = move || {
@@ -289,7 +290,7 @@ pub async fn employee_login(pool: web::Data<DBPool>, credentials: web::Form<User
         }
     };
     let cookie = Cookie::build("employee_session_token", response.employee_session_token.clone())
-        .domain("smartcityproject.net")
+        .domain("supersmartcity.de")
         .finish();
 
     if let Some(url) = credentials.redirect_success {

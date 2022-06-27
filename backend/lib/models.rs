@@ -65,7 +65,7 @@ impl Display for UserLoginRequest{
 impl UserLoginRequest {
     pub fn get_success_response(&self, token: String) -> HttpResponse {
         let cookie = actix_web::cookie::Cookie::build("user_session_token", token.clone())
-            .domain("smartcityproject.net")
+            .domain("supersmartcity.de")
             .finish();
 
         if let Some(redirect) = &self.redirect_success {
@@ -106,7 +106,7 @@ pub struct NewEmployeeInfo {
     pub lastname: String
 }
 
-#[derive(Queryable, Identifiable, PartialEq, Associations, Clone)]
+#[derive(Queryable, Identifiable, PartialEq, Associations, Clone, Debug)]
 #[belongs_to(EmployeeInfoModel, foreign_key = "info_id")]
 #[table_name="EmployeeLogins"]
 pub struct EmployeeLogin {
@@ -132,7 +132,7 @@ pub struct NewEmployeeLogin {
     pub(crate) hash: String
 }
 
-#[derive(Queryable, Identifiable, PartialEq, Associations)]
+#[derive(Queryable, Identifiable, PartialEq, Associations, Debug)]
 #[belongs_to(EmployeeLogin, foreign_key ="e_id")]
 #[table_name="EmployeeSessions"]
 pub struct EmployeeSession {
@@ -147,7 +147,7 @@ impl EmployeeSession {
     }
 }
 
-#[derive(Insertable, PartialEq, Associations)]
+#[derive(Insertable, PartialEq, Associations, Debug)]
 #[table_name="EmployeeSessions"]
 pub struct NewEmployeeSession {
     pub(crate) e_id: u64,
