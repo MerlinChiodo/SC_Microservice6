@@ -17,7 +17,7 @@ use diesel::dsl::*;
 use diesel::mysql::MysqlQueryBuilder;
 use lettre::{SmtpClient, Transport};
 use lettre_email::EmailBuilder;
-use moon::actix_http;
+use moon::{actix_http, chrono, Utc};
 use serde_json::{json, Value};
 use crate::request::UserRegistrationError;
 use crate::schema::EmployeeInfo::dsl::EmployeeInfo;
@@ -251,14 +251,26 @@ pub fn login_employee(db: &MysqlConnection, credentials: &UserInfo) -> Result<(E
         .then(|| true)
         .ok_or(UserAuthError::WrongPassword)?;
 
-    let session: Result<EmployeeSession, diesel::result::Error>= EmployeeSession::belonging_to(&emp_result).first(db);
+    let sessions_result: Result<Vec<EmployeeSession>, diesel::result::Error>= EmployeeSession::belonging_to(&emp_result)
+        .load(db);
 
-    if let Ok(s)= session {
-        return Ok((emp_result, NewEmployeeSession {
-            e_id: s.e_id,
-            token: s.token,
-            expires: s.expires
-        }));
+
+    if let Ok(sessions) = sessions_result {
+        let session_count = sessions.len();
+        let s = &sessions[session_count - 1];
+
+        println!("Found a session...");
+        if s.is_valid() {
+            println!("Session is valid, returning");
+            return Ok((emp_result, NewEmployeeSession {
+                e_id: s.e_id.clone(),
+                token: s.token.clone(),
+                expires: s.expires.clone()
+            }));
+        }
+        println!("Expiration: {:?} current: {:?}", s.expires, Utc::now().naive_utc());
+        println!("Session is invalid, returning a new one");
+        //TODO: Remove invalid session
     }
 
     let session = NewSession::new(&emp_result);
