@@ -38,8 +38,7 @@ pub enum UserAuthError {
     VerifyError(SessionCreationError),
     ServerError,
     UserNotFound,
-    WrongPassword,
-    UnableToGetInformation,
+    WrongPassword
 }
 
 impl Display for UserAuthError {
@@ -47,9 +46,6 @@ impl Display for UserAuthError {
         match self {
             UserAuthError::UserNotFound => write!(f,"The user or session does not exist"),
             UserAuthError::WrongPassword => write!(f, "The provided password does not match the username"),
-            UserAuthError::UnableToGetInformation=> write!(f, "Couldn't retrieve information about an user"),
-            UserAuthError::VerifyError(s)=> write!(f, "Error while trying to create new session {:?}", s),
-            UserAuthError::DbError(e) => write!(f, "Database issue: {:?}", e),
             _ => write!(f, "Internal error")
         }
     }
@@ -261,22 +257,20 @@ pub fn login_employee(db: &MysqlConnection, credentials: &UserInfo) -> Result<(E
 
     if let Ok(sessions) = sessions_result {
         let session_count = sessions.len();
-        if session_count > 0 {
-            let s = &sessions[session_count - 1];
-            println!("Found a session...");
-            if s.is_valid(){
-                println!("Session is valid, returning");
-                return Ok((emp_result, NewEmployeeSession {
-                    e_id: s.e_id.clone(),
-                    token: s.token.clone(),
-                    expires: s.expires.clone()
-                }));
-            }
+        let s = &sessions[session_count - 1];
 
-            println!("Expiration: {:?} current: {:?}", s.expires, Utc::now().naive_utc());
-            println!("Session is invalid, returning a new one");
-            //TODO: Remove invalid session
+        println!("Found a session...");
+        if s.is_valid() {
+            println!("Session is valid, returning");
+            return Ok((emp_result, NewEmployeeSession {
+                e_id: s.e_id.clone(),
+                token: s.token.clone(),
+                expires: s.expires.clone()
+            }));
         }
+        println!("Expiration: {:?} current: {:?}", s.expires, Utc::now().naive_utc());
+        println!("Session is invalid, returning a new one");
+        //TODO: Remove invalid session
     }
 
     let session = NewSession::new(&emp_result);
