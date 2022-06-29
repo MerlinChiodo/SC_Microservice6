@@ -66,6 +66,7 @@ username: Nutzername des neuen Mitarbeiters
 password: Passwort des neuen Mitarbeiters
 
 ### Antwort
+(Momentan noch ohne Json)
 200: Erfolg
 404: Session ist ungültig
 500: Angesteller extistiert bereits
