@@ -5,7 +5,7 @@ use actix_web::{App, web};
 use actix_web::http::StatusCode;
 use actix_web::middleware::{Compat, Condition, ErrorHandlers, Logger};
 use either::Either;
-use anyhow::{Context, Result};
+use anyhow::{Context, ensure, Result};
 use config::Config;
 use diesel::MysqlConnection;
 use diesel::r2d2::ConnectionManager;
@@ -20,7 +20,6 @@ use moon::config::{CONFIG};
 use moon::{error_handler, Frontend, Redirect};
 use std::future::join;
 use std::io::Write;
-use crate::endpoints::{login, login_external, login_page, register, validate_token_simple};
 
 use moon::start_with_app;
 use moon::futures::StreamExt;
@@ -29,7 +28,11 @@ pub type DBPool = diesel::r2d2::Pool<ConnectionManager<MysqlConnection>>;
 pub type RMQPool = deadpool_lapin::Pool;
 
 use serde::{Serialize, Deserialize};
-use crate::server::routes::{on_login_test, ping};
+use serde_json::Value;
+use crate::auth::Actions::{insert_new_pending_user, login_employee, register_employee, send_citizen_code};
+use crate::auth::Citizen::{Citizen, IsCitizen};
+use crate::auth::Endpoints::{employee_login, employee_login_external, employee_register, employee_verify, login_external, user_login, user_register, user_verify};
+use crate::server::routes::{ping};
 
 #[derive(Clone)]
 pub struct MailServer {
@@ -144,7 +147,7 @@ impl BackendServer {
                 .wrap(ErrorHandlers::new().handler(StatusCode::INTERNAL_SERVER_ERROR, error_handler::internal_server_error)
                     .handler(StatusCode::NOT_FOUND, error_handler::not_found))
 
-                .app_data(web::Data::new(server.clone()))
+                .app_data(web::Data::new(server.db_pool.clone()))
         };
         let server_thread = async {start_with_app(Self::frontend, Self::up_msg_handler, app, Self::set_routes).await.unwrap() };
         join!(server_thread, rmq_thread).await;
@@ -153,6 +156,7 @@ impl BackendServer {
     }
 
     fn set_routes(cfg: &mut web::ServiceConfig) {
+        /*
         cfg.route("/ping", web::get().to(ping))
             .route("/register", web::post().to(register))
             .route("/login", web::post().to(login))
@@ -161,6 +165,17 @@ impl BackendServer {
             .route("/page/login", web::get().to(login_page))
             .route("/external", web::get().to(login_external))
             .service(on_login_test);
+
+         */
+        cfg.route("/ping", web::get().to(ping))
+            .route("/login", web::post().to(user_login))
+            .route("/verify", web::post().to(user_verify))
+            .route("/register", web::post().to(user_register))
+            .route("/external", web::get().to(login_external))
+            .route("/employee/login", web::post().to(employee_login))
+            .route("/employee/register", web::post().to(employee_register))
+            .route("/employee/verify", web::post().to(employee_verify))
+            .route("/employee/external", web::get().to(employee_login_external));
     }
 
     async fn up_msg_handler(_: moon::UpMsgRequest<()>) {}
@@ -182,8 +197,23 @@ impl BackendServer {
             debug!("Message body {:?}", str::from_utf8(&message.data)?);
 
             let new_citizen_event_id = 1001;
-            let json_data = serde_json::from_slice(&message.data)?;
+            let json_data: Value = serde_json::from_slice(&message.data)?;
+            if json_data["event_id"] == 1001 {
+                println!("We got an event");
+                let id = json_data.get("citizen_id");
+                ensure!(id.is_some());
+                let id = id.unwrap().as_i64();
+                ensure!(id.is_some());
+                let db = self.db_pool.get()?;
 
+                let code = insert_new_pending_user(&db, id.unwrap())?;
+                let citizen = Citizen {
+                    citizen_id: id.unwrap() as u64
+                };
+
+                let info = citizen.get_citizen_info().await?;
+                send_citizen_code(&self.mail_sender.transport, &info, &code);
+            }
         }
         Ok(())
     }

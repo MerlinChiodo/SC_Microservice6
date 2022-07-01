@@ -1,6 +1,5 @@
 use actix_web::{http, HttpResponse, Responder, web};
 use serde_json::Value;
-use crate::actions::check_token;
 use crate::server::{BackendServerInfo, DBPool};
 use serde::Deserialize;
 use actix_web::get;
@@ -12,7 +11,7 @@ pub(crate) async fn ping(config: web::Data<BackendServerInfo>) -> impl Responder
         .body(body)
 }
 
-
+/*
 #[derive(Deserialize)]
 pub struct TokenQuery {
     token: String
@@ -48,3 +47,4 @@ pub async fn on_login_test(pool: web::Data<DBPool>, token: web::Query<TokenQuery
 
     format!("Hey {} {}, nice to meet you!", json_data.get("firstname").unwrap(), json_data.get("lastname").unwrap())
 }
+*/

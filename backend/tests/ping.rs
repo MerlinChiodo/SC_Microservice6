@@ -9,7 +9,7 @@ use rand::Rng;
 
 use backend::*;
 use backend::actions::{check_token, get_session, get_user, insert_new_session, insert_new_user};
-use backend::models::{User, UserIdentityInfo};
+use backend::models::{_User, UserIdentityInfo};
 use backend::schema::Users::username;
 use backend::server::{connect_to_db, server_start, BackendServer};
 
