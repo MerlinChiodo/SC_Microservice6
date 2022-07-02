@@ -51,7 +51,7 @@ pub async fn user_login(pool: Data<DBPool>, request: web::Form<UserLoginRequest>
     };
 
     let response = UserInfoRequestResponse {
-        citizen_id: 0,
+        citizen_id: result.user.id.clone(),
         username: result.user.username.clone(),
         user_session_token: result.new_session_token,
         info: result.user.get_citizen_info().await?
