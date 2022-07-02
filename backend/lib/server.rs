@@ -242,6 +242,7 @@ impl BackendServer {
                 };
 
                 let info = citizen.get_citizen_info().await?;
+                println!("Got citizen information");
                 send_citizen_code(&self.mail_sender.transport, &info, &code).await?;
             }
         }

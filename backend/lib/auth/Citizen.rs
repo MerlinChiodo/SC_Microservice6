@@ -7,21 +7,26 @@ use crate::auth::Errors::CitizenInfoRetrievalResult;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CitizenAddress {
-    pub street: String,
-    pub housenumber: String,
-    pub city_code: u32,
-    pub city: String,
+    pub street: Option<String>,
+    pub housenumber: Option<String>,
+    pub city_code: Option<u32>,
+    pub city: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CitizenInfo {
+    pub citizen_id: u64,
     pub firstname: String,
     pub lastname: String,
-    pub gender: String,
-    pub birthdate: String,
+    pub gender: Option<String>,
+    pub birthdate: Option<String>,
     pub place_of_birth: Option<String>,
+    pub birthname: Option<String>,
     pub email: Option<String>,
-    pub spouse_ids: Option<Vec<u32>>,
+    pub spouse_id: Option<u64>,
+    pub child_ids: Option<Vec<u64>>,
+
+    #[serde(flatten)]
     pub address: CitizenAddress
 }
 
