@@ -15,7 +15,6 @@ pub struct CitizenAddress {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CitizenInfo {
-    pub citizen_id: u64,
     pub firstname: String,
     pub lastname: String,
     pub gender: Option<String>,
