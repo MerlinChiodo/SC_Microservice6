@@ -123,6 +123,26 @@ impl BackendServer {
         let rmq_server = server.clone();
         let rmq_thread = rmq_server.events_listen(5);
 
+        let query_cfg = web::QueryConfig::default()
+            .error_handler(|err, req| {
+                actix_web::error::InternalError::from_response(
+                    "",
+                    actix_web::HttpResponse::BadRequest()
+                        .content_type("application/json")
+                        .body(format!(r#"{{"error": "{:?}"}}"#, err)),
+                ).into()
+            });
+
+        let form_cfg= web::FormConfig::default()
+            .error_handler(|err, req| {
+                actix_web::error::InternalError::from_response(
+                    "",
+                    actix_web::HttpResponse::BadRequest()
+                        .content_type("application/json")
+                        .body(format!(r#"{{"error": "{:?}"}}"#, err)),
+                ).into()
+            });
+
         info!("Starting the server");
 
         let app = move || {
@@ -143,10 +163,18 @@ impl BackendServer {
                     };
                     CONFIG.cors.origins.contains(origin)
                 }))
-
                 .wrap(ErrorHandlers::new().handler(StatusCode::INTERNAL_SERVER_ERROR, error_handler::internal_server_error)
                     .handler(StatusCode::NOT_FOUND, error_handler::not_found))
 
+                .app_data(query_cfg)
+                .app_data(web::FormConfig::default().error_handler(|err, req| {
+                    actix_web::error::InternalError::from_response(
+                        "",
+                        actix_web::HttpResponse::BadRequest()
+                            .content_type("application/json")
+                            .body(format!(r#"{{"error": "{:?}"}}"#, err)),
+                    ).into()
+                }))
                 .app_data(web::Data::new(server.db_pool.clone()))
         };
         let server_thread = async {start_with_app(Self::frontend, Self::up_msg_handler, app, Self::set_routes).await.unwrap() };
