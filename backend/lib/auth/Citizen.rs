@@ -26,7 +26,6 @@ pub struct CitizenInfo {
     pub spouse_id: Option<u64>,
     pub child_ids: Option<Vec<u64>>,
 
-    #[serde(flatten)]
     pub address: CitizenAddress
 }
 
