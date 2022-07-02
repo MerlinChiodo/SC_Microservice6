@@ -73,7 +73,7 @@ impl BackendServerInfo {
             mail: ServerCredentials {
                 host: std::env::var("MAIL_HOST")?,
                 username: std::env::var("MAIL_USERNAME")?,
-                password: std::env::var("MAIL_USERNAME")?
+                password: std::env::var("MAIL_PASSWORD")?
             }
         })
     }
