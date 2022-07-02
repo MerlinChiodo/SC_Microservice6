@@ -31,7 +31,7 @@ use serde::{Serialize, Deserialize};
 use serde_json::Value;
 use crate::auth::Actions::{insert_new_pending_user, login_employee, register_employee, send_citizen_code};
 use crate::auth::Citizen::{Citizen, IsCitizen};
-use crate::auth::Endpoints::{employee_login, employee_login_external, employee_register, employee_verify, login_external, user_login, user_register, user_verify};
+use crate::auth::Endpoints::{employee_login, employee_login_external, employee_register, employee_verify, login_external, login_page, user_login, user_register, user_verify};
 use crate::server::routes::{ping};
 
 #[derive(Clone)]
@@ -175,7 +175,9 @@ impl BackendServer {
             .route("/employee/login", web::post().to(employee_login))
             .route("/employee/register", web::post().to(employee_register))
             .route("/employee/verify", web::post().to(employee_verify))
+            .route("/page/login", web::get().to(login_page))
             .route("/employee/external", web::get().to(employee_login_external));
+
     }
 
     async fn up_msg_handler(_: moon::UpMsgRequest<()>) {}
@@ -212,7 +214,7 @@ impl BackendServer {
                 };
 
                 let info = citizen.get_citizen_info().await?;
-                send_citizen_code(&self.mail_sender.transport, &info, &code);
+                send_citizen_code(&self.mail_sender.transport, &info, &code).await?;
             }
         }
         Ok(())
