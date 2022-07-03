@@ -24,24 +24,21 @@
     <article class="grid">
         <div>
             <hgroup>
-                <h1>Anmelden</h1>
-                <h2>Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam</h2>
+                <h1>⛔️ Mitarbeiterbereich ⛔️</h1>
+                <h2>Als Mitarbeiter anmelden</h2>
             </hgroup>
             <form id="login_form" action="/employee/login" enctype="application/x-www-form-urlencoded" method="post" >
-                <input type="text" name="username" placeholder="Login" aria-label="Login" autocomplete="nickname" required>
-                <input type="password" name="password" placeholder="Password" aria-label="Password" autocomplete="current-password" required>
-                <fieldset>
-                    <label for="remember">
-                        <input type="checkbox" role="switch" id="remember" name="remember">
-                        Remember me
-                    </label>
-                </fieldset>
-                <button type="submit" class="contrast"</button>
+                <input type="text" name="username" placeholder="Benutzername" aria-label="Login" autocomplete="nickname" required>
+                <input type="password" name="password" placeholder="Passwort" aria-label="Password" autocomplete="current-password" required>
+                <button type="submit" class="contrast">Anmelden</button>
             </form>
         </div>
-        <div></div>
     </article>
 </main><!-- ./ Main -->
+<footer class="container-fluid">
+    <small>Startseite <a href="http://www.supersmartcity.de/" class="secondary">SmartCity</a></small>
+</footer><!-- ./ Footer -->
+
 <script>
     let parent = document.getElementById("login_form");
 

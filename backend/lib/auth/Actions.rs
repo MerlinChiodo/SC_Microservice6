@@ -140,7 +140,7 @@ pub async fn send_citizen_code(mail_client: &SmtpClient, citizen: &CitizenInfo, 
         .to(mail_adress)
         .from("support@mail.smartcityproject.net")
         .subject("SmartCity: Ihr Registrierungscode")
-        .text(format!("Hallo {}! Ihr persönlicher Registrierungscode lautet: {}", name, code))
+        .text(format!("Hallo {}! Ihr persönlicher Registrierungscode lautet: {}. Registrieren Sie sich unter: http://www.supersmartcity.de:9760", name, code))
         .build()?;
 
     let mut mailer = mail_client.clone().transport();

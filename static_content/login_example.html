@@ -4,8 +4,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sign in example • Pico.css</title>
-    <meta name="description" content="A minimalist layout for Login pages. Built with Pico CSS.">
+    <title>SmartCity • Login</title>
+    <meta name="description" content="Smartcitylogin">
     <link rel="shortcut icon" href="https://picocss.com/favicon.ico">
     <link rel="canonical" href="https://picocss.com/examples/sign-in/">
 
@@ -25,23 +25,20 @@
         <div>
             <hgroup>
                 <h1>Anmelden</h1>
-                <h2>Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam</h2>
+                <h2>Bei der SmartCity anmelden</h2>
             </hgroup>
             <form id="login_form" action="/login" enctype="application/x-www-form-urlencoded" method="post" >
-                <input type="text" name="username" placeholder="Login" aria-label="Login" autocomplete="nickname" required>
-                <input type="password" name="password" placeholder="Password" aria-label="Password" autocomplete="current-password" required>
-                <fieldset>
-                    <label for="remember">
-                        <input type="checkbox" role="switch" id="remember" name="remember">
-                        Remember me
-                    </label>
-                </fieldset>
-                <button type="submit" class="contrast"</button>
+                <input type="text" name="username" placeholder="Benutzername" aria-label="Login" autocomplete="nickname" required>
+                <input type="password" name="password" placeholder="Passwort" aria-label="Password" autocomplete="current-password" required>
+                <button type="submit" class="contrast">Anmelden</button>
             </form>
         </div>
-        <div></div>
     </article>
 </main><!-- ./ Main -->
+<footer class="container-fluid">
+    <small>Startseite <a href="http://www.supersmartcity.de/" class="secondary">SmartCity</a></small>
+</footer><!-- ./ Footer -->
+
 <script>
     let parent = document.getElementById("login_form");
 
